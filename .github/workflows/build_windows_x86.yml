@@ -1,0 +1,20 @@
+name: Build ALL / Windows 32 bit (x86)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build_all:
+    runs-on: ubuntu-latest
+    container: 
+      image: defter/jamtaba-win32:latest
+    steps:
+      - name: Chekout
+      - uses: actions/checkout@v3
+      
+      - name: Build
+      - shell: bash
+        run: |
+          cd ./PROJECTS
+          qmake . CONFIG+=release
+          make -j$(nproc)
