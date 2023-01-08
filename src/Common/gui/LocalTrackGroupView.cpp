@@ -18,12 +18,12 @@
 
 LocalTrackGroupView::LocalTrackGroupView(int channelIndex, MainWindow *mainWindow) :
     TrackGroupView(mainWindow),
-    index(channelIndex),
     mainWindow(mainWindow),
-    peakMeterOnly(false),
-    videoChannel(false),
     preparingToTransmit(false),
-    usingSmallSpacingInLayouts(false)
+    usingSmallSpacingInLayouts(false),
+    index(channelIndex),
+    peakMeterOnly(false),
+    videoChannel(false)
 {
     instrumentsButton = createInstrumentsButton();
     topPanelLayout->addWidget(instrumentsButton, 1, Qt::AlignCenter);
@@ -173,7 +173,7 @@ QPushButton *LocalTrackGroupView::createToolButton()
 {
     QPushButton *toolButton = new QPushButton();
     toolButton->setObjectName(QStringLiteral("toolButton"));
-    toolButton->setText(QStringLiteral(""));
+    toolButton->setText("");
     toolButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 
     return toolButton;
@@ -221,7 +221,7 @@ QMenu *LocalTrackGroupView::createPresetsDeletingSubMenu()
 
     // adding a menu action for each stored preset
     QStringList presetsNames = Configurator::getInstance()->getPresetFilesNames(false);
-    for (const QString &name : presetsNames) {
+    for (const QString &name : qAsConst(presetsNames)) {
         QString stripedName = getStripedPresetName(name);
         QAction *deleteAction = deleteMenu->addAction(stripedName);
         deleteAction->setData(name); // putting the preset name (including .json suffix) in the Action instance we can get this preset name inside slot 'loadPreset'
@@ -242,7 +242,7 @@ QMenu *LocalTrackGroupView::createPresetsLoadingSubMenu()
 
     // adding a menu action for each stored preset
     QStringList presetsNames = Configurator::getInstance()->getPresetFilesNames(false);
-    for (const QString &name : presetsNames) {
+    for (const QString &name : qAsConst(presetsNames)) {
         QString stripedName = getStripedPresetName(name);
         QAction *loadAction = loadMenu->addAction(stripedName);
         loadAction->setData(name); // putting the preset name (including .json suffix) in the Action instance we can get this preset name inside slot 'loadPreset'
@@ -352,7 +352,7 @@ LocalTrackView *LocalTrackGroupView::createTrackView(long trackID)
 void LocalTrackGroupView::setToWide()
 {
     if (trackViews.count() <= 1) { // don't allow 2 wide subchannels
-        for (BaseTrackView *trackView : this->trackViews) {
+        for (BaseTrackView *trackView : qAsConst(this->trackViews)) {
             trackView->setToWide();
         }
     }
@@ -362,7 +362,7 @@ void LocalTrackGroupView::setToWide()
 
 void LocalTrackGroupView::setToNarrow()
 {
-    for (BaseTrackView *trackView : this->trackViews) {
+    for (BaseTrackView *trackView : qAsConst(this->trackViews)) {
         trackView->setToNarrow();
     }
 

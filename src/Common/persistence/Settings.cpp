@@ -912,7 +912,7 @@ void Settings::removeVstFromBlackList(const QString &pluginPath)
     vstSettings.blackedPlugins.removeOne(pluginPath);
 }
 
-QStringList Settings::getVstPluginsPaths() const
+const QStringList& Settings::getVstPluginsPaths() const
 {
     qCDebug(jtSettings) << "Settings getVstPluginsPaths";
     return vstSettings.cachedPlugins;
@@ -944,13 +944,13 @@ void Settings::removeVstScanPath(const QString &path)
     vstSettings.foldersToScan.removeOne(path);
 }
 
-QStringList Settings::getVstScanFolders() const
+const QStringList& Settings::getVstScanFolders() const
 {
     qCDebug(jtSettings) << "Settings getVstScanFolders";
     return vstSettings.foldersToScan;
 }
 
-QStringList Settings::getBlackListedPlugins() const
+const QStringList& Settings::getBlackListedPlugins() const
 {
     qCDebug(jtSettings) << "Settings getVstScanFolders";
     return vstSettings.blackedPlugins;

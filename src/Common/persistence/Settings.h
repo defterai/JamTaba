@@ -511,15 +511,15 @@ public:
     void addVstPlugin(const QString &pluginPath);
     void addVstToBlackList(const QString &pluginPath);
     void removeVstFromBlackList(const QString &pluginPath);
-    QStringList getVstPluginsPaths() const;
-    QStringList getBlackListedPlugins() const;
+    const QStringList& getVstPluginsPaths() const;
+    const QStringList& getBlackListedPlugins() const;
     void clearVstCache();
     void clearBlackBox();
 
     // VST paths
     void addVstScanPath(const QString &path);
     void removeVstScanPath(const QString &path);
-    QStringList getVstScanFolders() const;
+    const QStringList& getVstScanFolders() const;
 
     QStringList getRecentEmojis() const;
     void setRecentEmojis(const QStringList &emojis);

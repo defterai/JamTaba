@@ -127,7 +127,7 @@ void PreferencesDialogStandalone::removeSelectedVstScanFolder()
     // search the ScanFolderPanel containing the clicked button
     auto panels = ui->panelScanFolders->findChildren<ScanFolderPanel *>();
     ScanFolderPanel *panelToDelete = nullptr;
-    for (auto panel : panels) {
+    for (auto panel : qAsConst(panels)) {
         if (panel->getRemoveButton() == buttonClicked) {
             panelToDelete = panel;
             break;
@@ -153,7 +153,7 @@ void PreferencesDialogStandalone::setCurrentScannedVstPlugin(const QString &plug
 void PreferencesDialogStandalone::updateBlackBox()
 {
     ui->blackListWidget->clear();
-    QStringList badPlugins = settings->getBlackListedPlugins();
+    const QStringList& badPlugins = settings->getBlackListedPlugins();
     for (const QString &badPlugin : badPlugins)
         ui->blackListWidget->appendPlainText(badPlugin);
 }
@@ -171,14 +171,27 @@ void PreferencesDialogStandalone::clearVstList()
     ui->vstListWidget->clear();
 }
 
+static QStringList getVstPluginFileFilters() {
+    QStringList filters;
+#ifdef Q_OS_WIN
+    filters << "VST2 (*.dll)";
+    //filters << "VST3 (*.vst3)";
+#elif Q_OS_MAC
+    filters << "VST2 (.vst)";
+    //filters << "VST3 (.vst3)";
+#endif
+    return filters;
+}
+
 // open a dialog to add a vst in the blacklist
 void PreferencesDialogStandalone::addBlackListedPlugins()
 {
     QFileDialog vstDialog(this, tr("Add Vst(s) to Black list ..."));
-    vstDialog.setNameFilter("Dll(*.dll)"); // TODO in mac the extension is .vst
+    vstDialog.setNameFilters(getVstPluginFileFilters());
 
-    if (!settings->getVstScanFolders().isEmpty())
-        vstDialog.setDirectory(settings->getVstScanFolders().first());
+    const QStringList& foldersToScan = settings->getVstScanFolders();
+    if (!foldersToScan.isEmpty())
+        vstDialog.setDirectory(foldersToScan.first());
 
     vstDialog.setAcceptMode(QFileDialog::AcceptOpen);
     vstDialog.setFileMode(QFileDialog::ExistingFiles);
@@ -195,9 +208,9 @@ void PreferencesDialogStandalone::addBlackListedPlugins()
 void PreferencesDialogStandalone::removeBlackListedPlugins()
 {
     QFileDialog vstDialog(this, tr("Remove Vst(s) from Black List ..."));
-    vstDialog.setNameFilter("Dll(*.dll)"); // TODO mac extension is .vst
-    QStringList foldersToScan = settings->getVstScanFolders();
+    vstDialog.setNameFilters(getVstPluginFileFilters());
 
+    const QStringList& foldersToScan = settings->getVstScanFolders();
     if (!foldersToScan.isEmpty())
         vstDialog.setDirectory(foldersToScan.first());
 
@@ -206,7 +219,7 @@ void PreferencesDialogStandalone::removeBlackListedPlugins()
 
     if (vstDialog.exec()) {
         QStringList vstNames = vstDialog.selectedFiles();
-        for (const QString &string : vstNames) {
+        for (const QString &string : qAsConst(vstNames)) {
             emit vstPluginRemovedFromBlackList(string);
             updateBlackBox();
         }
@@ -463,12 +476,12 @@ void PreferencesDialogStandalone::accept()
     QList<bool> midiInputsStatus;
     // build midi inputs devices status
     auto midiBoxes = ui->midiContentPanel->findChildren<QCheckBox *>();
-    for (auto check : midiBoxes)
+    for (auto check : qAsConst(midiBoxes))
         midiInputsStatus.append(check->isChecked());
 
     QList<bool> syncOutputsStatus;
     auto syncBoxes = ui->syncContentPanel->findChildren<QCheckBox *>();
-    for (auto check : syncBoxes)
+    for (auto check : qAsConst(syncBoxes))
         syncOutputsStatus.append(check->isChecked());
 
     emit ioPreferencesChanged(midiInputsStatus, syncOutputsStatus,
@@ -521,6 +534,9 @@ void PreferencesDialogStandalone::selectTab(int index)
         break;
     case PreferencesTab::TabMetronome:
         populateMetronomeTab();
+        break;
+    case PreferencesTab::TabRemember:
+        // do nothing
         break;
     }
 }

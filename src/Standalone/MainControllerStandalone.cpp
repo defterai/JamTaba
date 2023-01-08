@@ -633,7 +633,7 @@ bool MainControllerStandalone::vstScanIsNeeded() const
         return true;
 
     // checking for new vst plugins in scan folders
-    QStringList foldersToScan = settings.getVstScanFolders();
+    const QStringList& foldersToScan = settings.getVstScanFolders();
 
     QStringList skipList(settings.getBlackListedPlugins());
     skipList.append(settings.getVstPluginsPaths());
@@ -712,7 +712,7 @@ void MainControllerStandalone::scanVstPlugins(bool scanOnlyNewPlugins)
         if (scanOnlyNewPlugins)
             skipList.append(settings.getVstPluginsPaths());
 
-        QStringList foldersToScan = settings.getVstScanFolders();
+        const QStringList& foldersToScan = settings.getVstScanFolders();
         vstPluginFinder->scan(foldersToScan, skipList);
     }
 }
