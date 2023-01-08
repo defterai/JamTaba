@@ -17,7 +17,7 @@ PrivateServerDialog::PrivateServerDialog(QWidget *parent, MainController *mainCo
     connect(ui->okButton, &QPushButton::clicked, this, &PrivateServerDialog::accept);
 
     setAttribute(Qt::WA_DeleteOnClose);
-    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
+    setWindowFlags((windowFlags() | Qt::WindowMinMaxButtonsHint) & ~Qt::WindowContextHelpButtonHint);
 
     buildComboBoxItems();
 
