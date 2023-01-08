@@ -392,10 +392,10 @@ controller::NinjamController *MainControllerStandalone::createNinjamController()
     return new NinjamController(this);
 }
 
-audio::AudioDriver *MainControllerStandalone::createAudioDriver(
+QSharedPointer<audio::AudioDriver> MainControllerStandalone::createAudioDriver(
     const persistence::Settings &settings)
 {
-    return new audio::PortAudioDriver(
+    return audio::PortAudioDriver::CreateInstance(
         this,
         settings.getLastAudioInputDevice(),
         settings.getLastAudioOutputDevice(),
@@ -405,7 +405,7 @@ audio::AudioDriver *MainControllerStandalone::createAudioDriver(
         settings.getLastGlobalAudioOutput(),
         settings.getLastSampleRate(),
         settings.getLastBufferSize()
-        );
+        ).staticCast<audio::AudioDriver>();
 }
 
 MainControllerStandalone::MainControllerStandalone(persistence::Settings settings,
@@ -449,7 +449,7 @@ void MainControllerStandalone::start()
     if (!audioDriver)
     {
         qCInfo(jtCore) << "Creating audio driver...";
-        audio::AudioDriver *driver = nullptr;
+        QSharedPointer<audio::AudioDriver> driver;
         try
         {
             driver = createAudioDriver(settings);
@@ -461,9 +461,9 @@ void MainControllerStandalone::start()
             QMessageBox::warning(window, "Audio Initialization Problem!", error.what());
         }
         if (!driver)
-            driver = new audio::NullAudioDriver();
+            driver = QSharedPointer<audio::NullAudioDriver>::create();
 
-        audioDriver.reset(driver);
+        audioDriver = driver;
 
         QObject::connect(audioDriver.data(), SIGNAL(sampleRateChanged(int)), this,
                          SLOT(setSampleRate(int)));

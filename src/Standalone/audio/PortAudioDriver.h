@@ -1,6 +1,8 @@
 #ifndef PORT_AUDIO_DRIVER_H
 #define PORT_AUDIO_DRIVER_H
 
+#include <QSharedPointer>
+
 #include "audio/core/AudioDriver.h"
 #include "portaudio.h"
 
@@ -10,6 +12,12 @@ class PortAudioDriver final : public AudioDriver
 {
 
 public:
+    static QSharedPointer<PortAudioDriver> CreateInstance(controller::MainController *mainController,
+                                                          QString audioInputDevice, QString audioOutputDevice,
+                                                          int firstInputIndex, int lastInputIndex, int firstOutputIndex,
+                                                          int lastOutputIndex, int sampleRate, int bufferSize);
+    static QSharedPointer<PortAudioDriver> GetInstance();
+
     PortAudioDriver(controller::MainController *mainController,
                     QString audioInputDevice, QString audioOutputDevice,
                     int firstInputIndex, int lastInputIndex, int firstOutputIndex,
@@ -58,7 +66,7 @@ protected:
 
 private:
     bool initPortAudio(int sampleRate, int bufferSize);
-    PaStream *paStream;
+
     void translatePortAudioCallBack(const void *in, void *out, unsigned long framesPerBuffer);
 
     void changeInputSelection(int firstInputChannelIndex, int inputChannelCount);
@@ -74,8 +82,13 @@ private:
 
     void preInitializePortAudioStream(PaStream *stream);
 
-    const bool useSystemDefaultDevices;
+    static QMutex driverInstanceMutex;
+    static QWeakPointer<PortAudioDriver> driverInstance;
 
+    QMutex processMutex;
+    PaStream *paStream = nullptr;
+
+    const bool useSystemDefaultDevices;
 };
 
 } // namespace

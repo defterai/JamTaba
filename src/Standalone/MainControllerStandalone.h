@@ -3,6 +3,7 @@
 
 #include "MainController.h"
 #include <QApplication>
+#include <QSharedPointer>
 
 #ifdef Q_OS_MAC
     #include "AU/AudioUnitPluginFinder.h"
@@ -142,7 +143,7 @@ namespace controller
         midi::MidiDriver *createMidiDriver();
 
         // TODO - Audio driver need just the audio settings to initialize, not the entire settings.
-        AudioDriver *createAudioDriver(const persistence::Settings &settings);
+        QSharedPointer<audio::AudioDriver> createAudioDriver(const persistence::Settings &settings);
 
         controller::NinjamController *createNinjamController() override;
 
@@ -175,7 +176,7 @@ namespace controller
         QList<Host *> hosts;
         QApplication *application;
 
-        QScopedPointer<AudioDriver> audioDriver;
+        QSharedPointer<AudioDriver> audioDriver;
         QScopedPointer<midi::MidiDriver> midiDriver;
 
         QList<PluginDescriptor> pluginsDescriptors;
