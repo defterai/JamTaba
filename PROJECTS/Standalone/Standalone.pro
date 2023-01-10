@@ -23,7 +23,7 @@ INCLUDEPATH += $$SOURCE_PATH/Standalone/gui
 
 INCLUDEPATH += $$VST_SDK_PATH/VST2_SDK/pluginterfaces/vst2.x
 
-HEADERS += MainControllerStandalone.h
+HEADERS += MainControllerStandalone.h \
 HEADERS += gui/MainWindowStandalone.h
 HEADERS += gui/PreferencesDialogStandalone.h
 HEADERS += gui/LocalTrackViewStandalone.h

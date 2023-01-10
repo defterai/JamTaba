@@ -1,6 +1,7 @@
 #include "LooperStates.h"
 #include "Looper.h"
 #include "LooperLayer.h"
+#include "persistence/LooperSettings.h"
 
 #include <QDebug>
 
@@ -11,6 +12,7 @@ using audio::PlayingState;
 using audio::RecordingState;
 using audio::Looper;
 using audio::SamplesBuffer;
+using persistence::LooperMode;
 
 LooperState::LooperState(Looper *looper)
     : looper(looper)
@@ -54,7 +56,7 @@ PlayingState::PlayingState(Looper *looper)
 void PlayingState::handleNewCycle(uint samplesInCycle)
 {
     Q_UNUSED(samplesInCycle)
-    if (looper->mode == Looper::Mode::Sequence) {
+    if (looper->mode == LooperMode::Sequence) {
         looper->incrementCurrentLayer();
     }
 
@@ -70,11 +72,11 @@ void PlayingState::addBuffer(const SamplesBuffer &samples, uint samplesToProcess
 void PlayingState::mixTo(SamplesBuffer &samples, uint samplesToProcess)
 {
     switch (looper->mode) {
-    case Looper::Sequence:
-    case Looper::SelectedLayer:
+    case LooperMode::Sequence:
+    case LooperMode::SelectedLayer:
         looper->mixCurrentLayerTo(samples, samplesToProcess);
         break;
-    case Looper::AllLayers:
+    case LooperMode::AllLayers:
     {
         bool isPlayingLockedLayersOnly = looper->getOption(Looper::PlayLockedLayers);
         if (!isPlayingLockedLayersOnly)
@@ -84,7 +86,7 @@ void PlayingState::mixTo(SamplesBuffer &samples, uint samplesToProcess)
         break;
     }
     default:
-        qCritical() << looper->mode << " not implemented yet!";
+        qCritical() << (quint8)looper->mode << " not implemented yet!";
     }
 }
 
@@ -104,7 +106,7 @@ void RecordingState::handleNewCycle(uint samplesInCycle)
     const bool isOverdubbing = looper->getOption(Looper::Overdub);
     const bool isPlayingLockedLayersOnly = looper->getOption(Looper::PlayLockedLayers);
 
-    if (looper->mode != Looper::SelectedLayer) {
+    if (looper->mode != LooperMode::SelectedLayer) {
         if (!isOverdubbing) {
             int previousLayer = looper->getCurrentLayerIndex();
             int nextLayer = looper->getNextUnlockedLayerIndex();
@@ -129,7 +131,7 @@ void RecordingState::mixTo(SamplesBuffer &samples, uint samplesToProcess)
 {
     samples.zero(); // zeroing samples before mix to avoid re-add buffered audio and double the incomming samples
 
-    const bool hearingAllLayers = looper->getMode() == Looper::AllLayers || looper->getOption(Looper::HearAllLayers);
+    const bool hearingAllLayers = looper->getMode() == LooperMode::AllLayers || looper->getOption(Looper::HearAllLayers);
     if (hearingAllLayers) {
         if (looper->getOption(Looper::PlayLockedLayers) && looper->hasLockedLayers()) {
             looper->mixLockedLayers(samples, samplesToProcess);
@@ -172,7 +174,7 @@ void WaitingToRecordState::mixTo(SamplesBuffer &samples, uint samplesToProcess)
     looper->processBufferUsingCurrentLayerSettings(lastInputBuffer); // apply current layer gain and pan settings
     samples.add(lastInputBuffer); // mix the current incomming/input buffer
 
-    const bool hearingAllLayers = looper->getMode() == Looper::AllLayers || looper->getOption(Looper::HearAllLayers);
+    const bool hearingAllLayers = looper->getMode() == LooperMode::AllLayers || looper->getOption(Looper::HearAllLayers);
     if (hearingAllLayers) {
         if (looper->getOption(Looper::PlayLockedLayers))
             looper->mixLockedLayers(samples, samplesToProcess);

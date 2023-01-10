@@ -266,9 +266,11 @@ MetronomePanel *NinjamRoomWindow::createMetronomePanel()
 {
     auto panel = new MetronomePanel(this);
 
-    float initialMetronomeGain = mainController->getSettings().getMetronomeGain();
-    float initialMetronomePan = mainController->getSettings().getMetronomePan();
-    bool initialMetronomeMuteStatus = mainController->getSettings().getMetronomeMuteStatus();
+    const auto& metronomeSettings = mainController->getSettings().metronomeSettings;
+
+    float initialMetronomeGain = metronomeSettings.getGain();
+    float initialMetronomePan = metronomeSettings.getPan();
+    bool initialMetronomeMuteStatus = metronomeSettings.isMuted();
 
     panel->setGainSliderValue(100 * initialMetronomeGain);
     panel->setPanSliderValue(4 * initialMetronomePan);

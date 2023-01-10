@@ -211,7 +211,7 @@ void NinjamTrackView::setInitialValues(const persistence::CacheEntry &initialVal
 {
     cacheEntry = initialValues;
 
-    auto settings = mainController->getSettings();
+    const auto& settings = mainController->getSettings().rememberSettings;
 
     if (settings.isRememberingLevel())
         levelSlider->setValue(initialValues.getGain() * 100);

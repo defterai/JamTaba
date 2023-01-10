@@ -138,12 +138,12 @@ void MainControllerStandalone::removePlugin(int inputTrackIndex, const QSharedPo
 
 void MainControllerStandalone::addPluginsScanPath(const QString &path)
 {
-    settings.addVstScanPath(path);
+    settings.vstSettings.addPluginScanPath(path);
 }
 
 void MainControllerStandalone::removePluginsScanPath(const QString &path)
 {
-    settings.removeVstScanPath(path);
+    settings.vstSettings.removePluginScanPath(path);
 }
 
 void MainControllerStandalone::clearPluginsList()
@@ -153,22 +153,22 @@ void MainControllerStandalone::clearPluginsList()
 
 void MainControllerStandalone::clearPluginsCache()
 {
-    settings.clearVstCache();
+    settings.vstSettings.clearPluginsCache();
 
-    #ifdef Q_OS_MAC
-    settings.clearAudioUnitCache();
-    #endif
+#ifdef Q_OS_MAC
+    settings.audioUnitSettings.clearPluginsCache();
+#endif
 }
 
 // VST BlackList ...
 void MainControllerStandalone::addBlackVstToSettings(const QString &path)
 {
-    settings.addVstToBlackList(path);
+    settings.vstSettings.addIgnoredPlugin(path);
 }
 
 void MainControllerStandalone::removeBlackVstFromSettings(const QString &pluginPath)
 {
-    settings.removeVstFromBlackList(pluginPath);
+    settings.vstSettings.removeIgnoredPlugin(pluginPath);
 }
 
 bool MainControllerStandalone::inputIndexIsValid(int inputIndex)
@@ -293,7 +293,7 @@ void MainControllerStandalone::setBufferSize(int newBufferSize)
         host->setBlockSize(newBufferSize);
 
     audioDriver->setBufferSize(newBufferSize);
-    settings.setBufferSize(newBufferSize);
+    settings.audioSettings.setBufferSize(newBufferSize);
 }
 
 void MainControllerStandalone::on_audioDriverStarted()
@@ -333,7 +333,7 @@ void MainControllerStandalone::on_ninjamStartProcessing(int intervalPosition)
 void MainControllerStandalone::addFoundedVstPlugin(const QString &name, const QString &path)
 {
     bool containThePlugin = false;
-    for (const auto descriptor : pluginsDescriptors)
+    for (const auto& descriptor : qAsConst(pluginsDescriptors))
     {
         if (descriptor.isVST() && descriptor.getPath() == path)
         {
@@ -344,7 +344,7 @@ void MainControllerStandalone::addFoundedVstPlugin(const QString &name, const QS
 
     if (!containThePlugin)
     {
-        settings.addVstPlugin(path);
+        settings.vstSettings.addPlugin(path);
         auto category = audio::PluginDescriptor::VST_Plugin;
         QString manufacturer = "";
         pluginsDescriptors.append(audio::PluginDescriptor(name, category, manufacturer, path));
@@ -365,7 +365,7 @@ void MainControllerStandalone::addFoundedAudioUnitPlugin(const QString &name, co
     }
     if (!containThePlugin)
     {
-        settings.addAudioUnitPlugin(path);
+        settings.audioUnitSettings.addPlugin(path);
         pluginsDescriptors.append(au::createPluginDescriptor(name, path));
     }
 }
@@ -383,7 +383,8 @@ void MainControllerStandalone::setMainWindow(MainWindow *mainWindow)
 midi::MidiDriver *MainControllerStandalone::createMidiDriver()
 {
     // return new Midi::PortMidiDriver(settings.getMidiInputDevicesStatus());
-    return new midi::RtMidiDriver(settings.getMidiInputDevicesStatus(), settings.getSyncOutputDevicesStatus());
+    return new midi::RtMidiDriver(settings.midiSettings.getInputDevicesStatus(),
+                                  settings.syncSettings.getOutputDevicesStatus());
     // return new Midi::NullMidiDriver();
 }
 
@@ -393,18 +394,18 @@ controller::NinjamController *MainControllerStandalone::createNinjamController()
 }
 
 QSharedPointer<audio::AudioDriver> MainControllerStandalone::createAudioDriver(
-    const persistence::Settings &settings)
+    const persistence::AudioSettings &settings)
 {
     return audio::PortAudioDriver::CreateInstance(
         this,
-        settings.getLastAudioInputDevice(),
-        settings.getLastAudioOutputDevice(),
-        settings.getFirstGlobalAudioInput(),
-        settings.getLastGlobalAudioInput(),
-        settings.getFirstGlobalAudioOutput(),
-        settings.getLastGlobalAudioOutput(),
-        settings.getLastSampleRate(),
-        settings.getLastBufferSize()
+        settings.getInputDevice(),
+        settings.getOutputDevice(),
+        settings.getFirstInputIndex(),
+        settings.getLastInputIndex(),
+        settings.getFirstOutputIndex(),
+        settings.getLastOutputIndex(),
+        settings.getSampleRate(),
+        settings.getBufferSize()
         ).staticCast<audio::AudioDriver>();
 }
 
@@ -452,7 +453,7 @@ void MainControllerStandalone::start()
         QSharedPointer<audio::AudioDriver> driver;
         try
         {
-            driver = createAudioDriver(settings);
+            driver = createAudioDriver(settings.audioSettings);
         }
         catch (const std::runtime_error &error)
         {
@@ -484,7 +485,8 @@ void MainControllerStandalone::start()
     }
 
     if (midiDriver)
-        midiDriver->start(settings.getMidiInputDevicesStatus(), settings.getSyncOutputDevicesStatus());
+        midiDriver->start(settings.midiSettings.getInputDevicesStatus(),
+                          settings.syncSettings.getOutputDevicesStatus());
 
     qCInfo(jtCore) << "Creating plugin finder...";
     vstPluginFinder.reset(new audio::VSTPluginFinder());
@@ -628,15 +630,15 @@ void MainControllerStandalone::addDefaultPluginsScanPath()
 
 bool MainControllerStandalone::vstScanIsNeeded() const
 {
-    bool vstCacheIsEmpty = settings.getVstPluginsPaths().isEmpty();
+    bool vstCacheIsEmpty = settings.vstSettings.getPluginPaths().isEmpty();
     if (vstCacheIsEmpty)
         return true;
 
     // checking for new vst plugins in scan folders
-    const QStringList& foldersToScan = settings.getVstScanFolders();
+    const QStringList& foldersToScan = settings.vstSettings.getPluginScanPaths();
 
-    QStringList skipList(settings.getBlackListedPlugins());
-    skipList.append(settings.getVstPluginsPaths());
+    QStringList skipList(settings.vstSettings.getIgnoredPlugins());
+    skipList.append(settings.vstSettings.getPluginScanPaths());
 
     bool newVstFounded = false;
     for (const QString &scanFolder : foldersToScan)
@@ -688,14 +690,14 @@ void MainControllerStandalone::initializeVstPluginsList(const QStringList &paths
 
 void MainControllerStandalone::scanAllVstPlugins()
 {
-    saveLastUserSettings(settings.getInputsSettings()); // save the config file before start scanning
+    saveLastUserSettings(settings.inputsSettings); // save the config file before start scanning
     clearPluginsCache();
     scanVstPlugins(false);
 }
 
 void MainControllerStandalone::scanOnlyNewVstPlugins()
 {
-    saveLastUserSettings(settings.getInputsSettings()); // save the config file before start scanning
+    saveLastUserSettings(settings.inputsSettings); // save the config file before start scanning
     scanVstPlugins(true);
 }
 
@@ -708,11 +710,11 @@ void MainControllerStandalone::scanVstPlugins(bool scanOnlyNewPlugins)
 
         // The skipList contains the paths for black listed plugins by default.
         // If the parameter 'scanOnlyNewPlugins' is 'true' the cached plugins are added in the skipList too.
-        QStringList skipList(settings.getBlackListedPlugins());
+        QStringList skipList(settings.vstSettings.getIgnoredPlugins());
         if (scanOnlyNewPlugins)
-            skipList.append(settings.getVstPluginsPaths());
+            skipList.append(settings.vstSettings.getPluginPaths());
 
-        const QStringList& foldersToScan = settings.getVstScanFolders();
+        const QStringList& foldersToScan = settings.vstSettings.getPluginScanPaths();
         vstPluginFinder->scan(foldersToScan, skipList);
     }
 }

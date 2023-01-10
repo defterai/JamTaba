@@ -46,8 +46,7 @@ JamRoomViewPanel::JamRoomViewPanel(const login::RoomInfo &roomInfo, controller::
     mapWidgetLayout->setAlignment(waveDrawingButtonsLayout, Qt::AlignBottom);
 
     // 'remember' the wave drawing mode
-    WavePeakPanel::WaveDrawingMode lastDrawingMode = static_cast<WavePeakPanel::WaveDrawingMode>(mainController->getLastWaveDrawingMode());
-    setWaveDrawingMode(lastDrawingMode);
+    setWaveDrawingMode(mainController->getLastWaveDrawingMode());
 
     initialize(roomInfo);
 }
@@ -63,24 +62,26 @@ void JamRoomViewPanel::setWaveDrawingButtonsVisibility(bool showButtons)
 
 void JamRoomViewPanel::createWaveDrawingButtonsLayout(QLayout *layout)
 {
-    const static QString icons[4] =
+    const static auto modesCount = 4;
+
+    const static QString icons[modesCount] =
     {
         "wave_normal",
         "wave_pixelated",
         "wave_buildings",
-        "wave_buildings_pixelated"
+        "wave_buildings_pixelated",
     };
 
-    const static WavePeakPanel::WaveDrawingMode drawingModes[4] =
+    const static persistence::WaveDrawingMode drawingModes[modesCount] =
     {
-        WavePeakPanel::SOUND_WAVE,
-        WavePeakPanel::PIXELED_SOUND_WAVE,
-        WavePeakPanel::BUILDINGS,
-        WavePeakPanel::PIXELED_BUILDINGS
+        persistence::WaveDrawingMode::SoundWave,
+        persistence::WaveDrawingMode::PixeledSoundWave,
+        persistence::WaveDrawingMode::Buildings,
+        persistence::WaveDrawingMode::PixeledBuildings,
     };
 
     QButtonGroup *buttonGroup = new QButtonGroup(this);
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < modesCount; ++i) {
         QPushButton *button = new QPushButton();
         button->setVisible(false);
         button->setCheckable(true);
@@ -89,7 +90,7 @@ void JamRoomViewPanel::createWaveDrawingButtonsLayout(QLayout *layout)
         buttonGroup->addButton(button);
         layout->addWidget(button);
 
-        WavePeakPanel::WaveDrawingMode drawingMode = drawingModes[i];
+        persistence::WaveDrawingMode drawingMode = drawingModes[i];
         waveDrawingButtons.insert(drawingMode, button);
 
         connect(button, &QPushButton::clicked, [drawingMode, this]{
@@ -99,7 +100,7 @@ void JamRoomViewPanel::createWaveDrawingButtonsLayout(QLayout *layout)
     }
 }
 
-void JamRoomViewPanel::setWaveDrawingMode(WavePeakPanel::WaveDrawingMode mode)
+void JamRoomViewPanel::setWaveDrawingMode(persistence::WaveDrawingMode mode)
 {
     ui->wavePeakPanel->setDrawingMode(mode);
 

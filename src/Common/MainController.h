@@ -143,9 +143,9 @@ public:
 
     bool isUsingNarrowedTracks() const;
 
-    void storeWaveDrawingMode(quint8 drawingMode);
+    void storeWaveDrawingMode(persistence::WaveDrawingMode drawingMode);
 
-    quint8 getLastWaveDrawingMode() const;
+    persistence::WaveDrawingMode getLastWaveDrawingMode() const;
 
     void enterInRoom(const RoomInfo &room, const QList<ChannelMetadata> &channels, const QString &password = "");
 
@@ -224,7 +224,7 @@ public:
 
     bool isJamRecorderActivated(const QString &writerId) const;
 
-    void storePrivateServerSettings(const QString &server, int serverPort, const QString &password);
+    void storePrivateServerSettings(const QString &server, quint16 serverPort, const QString &password);
 
     bool isUsingCustomMetronomeSounds() const;
 
@@ -268,7 +268,7 @@ public:
 
     bool userIsBlockedInChat(const QString &userName) const;
 
-    void storeMeteringSettings(bool showingMaxPeaks, quint8 meterOption);
+    void storeMeteringSettings(bool showingMaxPeaks, persistence::MeterMode meterOption);
 
     static QString getSuggestedUserName();
 
@@ -279,11 +279,11 @@ public:
 
     // looper settings
     void storeLooperPreferredLayerCount(quint8 layersCount);
-    void storeLooperPreferredMode(quint8 looperMode);
+    void storeLooperPreferredMode(persistence::LooperMode looperMode);
     void storeLooperAudioEncodingFlag(bool encodeAudioWhenSaving);
     void storeLooperFolder(const QString &newLooperFolder);
     quint8 getLooperPreferedLayersCount() const;
-    quint8 getLooperPreferedMode() const;
+    persistence::LooperMode getLooperPreferedMode() const;
     bool getLooperAudioEncodingFlag() const;
     quint8 getLooperBitDepth() const;
 
@@ -451,32 +451,32 @@ inline MainWindow *MainController::getMainWindow() const
 
 inline void MainController::setLocalChannelsCollapsed(bool collapsed)
 {
-    settings.setLocalChannelsCollapsed(collapsed);
+    settings.collapseSettings.setLocalChannelsCollapsed(collapsed);
 }
 
 inline void MainController::setBottomSectionCollapsed(bool collapsed)
 {
-    settings.setBottomSectionCollapsed(collapsed);
+    settings.collapseSettings.setBottomSectionCollapsed(collapsed);
 }
 
 inline void MainController::setChatSectionCollapsed(bool collapsed)
 {
-    settings.setChatSectionCollapsed(collapsed);
+    settings.collapseSettings.setChatSectionCollapsed(collapsed);
 }
 
 inline bool MainController::isLocalChannelsCollapsed() const
 {
-    return settings.isLocalChannelsCollapsed();
+    return settings.collapseSettings.isLocalChannelsCollapsed();
 }
 
 inline bool MainController::isBottomSectionCollapsed() const
 {
-    return settings.isBottomSectionCollapsed();
+    return settings.collapseSettings.isBottomSectionCollapsed();
 }
 
 inline bool MainController::isChatSectionCollapsed() const
 {
-    return settings.isChatSectionCollapsed();
+    return settings.collapseSettings.isChatSectionCollapsed();
 }
 
 inline qint8 MainController::getChatFontSizeOffset() const
@@ -506,32 +506,32 @@ inline AbstractMp3Streamer *MainController::getRoomStreamer() const
 
 inline QString MainController::getMetronomeFirstBeatFile() const
 {
-    return settings.getMetronomeFirstBeatFile();
+    return settings.metronomeSettings.getCustomPrimaryBeatFile();
 }
 
 inline QString MainController::getMetronomeOffBeatFile() const
 {
-    return settings.getMetronomeOffBeatFile();
+    return settings.metronomeSettings.getCustomOffBeatFile();
 }
 
 inline QString MainController::getMetronomeAccentBeatFile() const
 {
-    return settings.getMetronomeAccentBeatFile();
+    return settings.metronomeSettings.getCustomAccentBeatFile();
 }
 
 inline bool MainController::isUsingCustomMetronomeSounds() const
 {
-    return settings.isUsingCustomMetronomeSounds();
+    return settings.metronomeSettings.isUsingCustomSounds();
 }
 
 inline bool MainController::isJamRecorderActivated(const QString &writerId) const
 {
-    return settings.isJamRecorderActivated(writerId);
+    return settings.recordingSettings.isJamRecorderActivated(writerId);
 }
 
 inline bool MainController::isMultiTrackRecordingActivated() const
 {
-    return settings.isSaveMultiTrackActivated();
+    return settings.recordingSettings.isSaveMultiTrackActivated();
 }
 
 inline const Settings &MainController::getSettings() const
@@ -541,7 +541,7 @@ inline const Settings &MainController::getSettings() const
 
 inline float MainController::getEncodingQuality() const
 {
-    return settings.getEncodingQuality();
+    return settings.audioSettings.getEncodingQuality();
 }
 
 inline int MainController::getInputTracksCount() const
@@ -604,14 +604,14 @@ inline bool MainController::isUsingNarrowedTracks() const
     return settings.isUsingNarrowedTracks();
 }
 
-inline void MainController::storeWaveDrawingMode(quint8 drawingMode)
+inline void MainController::storeWaveDrawingMode(persistence::WaveDrawingMode drawingMode)
 {
-    settings.storeWaveDrawingMode(drawingMode);
+    settings.meteringSettings.setWaveDrawingMode(drawingMode);
 }
 
-inline quint8 MainController::getLastWaveDrawingMode() const
+inline persistence::WaveDrawingMode MainController::getLastWaveDrawingMode() const
 {
-    return settings.getLastWaveDrawingMode();
+    return settings.meteringSettings.getWaveDrawingMode();
 }
 
 inline void MainController::setMainWindow(MainWindow *mainWindow)
@@ -621,60 +621,66 @@ inline void MainController::setMainWindow(MainWindow *mainWindow)
 
 inline void MainController::storeLooperBitDepth(quint8 bitDepth)
 {
-    settings.setLooperBitDepth(bitDepth);
+    settings.looperSettings.setWaveFilesBitDepth(bitDepth);
 }
 
 inline quint8 MainController::getLooperBitDepth() const
 {
-    return settings.getLooperBitDepth();
+    return settings.looperSettings.getWaveFilesBitDepth();
 }
 
 inline void MainController::storeLooperPreferredLayerCount(quint8 layersCount)
 {
-    settings.setLooperPreferredLayersCount(layersCount);
+    settings.looperSettings.setPreferredLayersCount(layersCount);
 }
 
-inline void MainController::storeLooperPreferredMode(quint8 looperMode)
+inline void MainController::storeLooperPreferredMode(persistence::LooperMode looperMode)
 {
-    settings.setLooperPreferredMode(looperMode);
+    settings.looperSettings.setPreferredMode(looperMode);
 }
 
 inline void MainController::storeLooperAudioEncodingFlag(bool encodeAudioWhenSaving)
 {
-    settings.setLooperAudioEncodingFlag(encodeAudioWhenSaving);
+    settings.looperSettings.setEncodingAudioWhenSaving(encodeAudioWhenSaving);
 }
 
 inline void MainController::storeLooperFolder(const QString &newLooperFolder)
 {
-    settings.setLooperFolder(newLooperFolder);
+    settings.looperSettings.setLoopsFolder(newLooperFolder);
 }
 
 inline quint8 MainController::getLooperPreferedLayersCount() const
 {
-    return settings.getLooperPreferredLayersCount();
+    return settings.looperSettings.getPreferredLayersCount();
 }
 
-inline quint8 MainController::getLooperPreferedMode() const
+inline persistence::LooperMode MainController::getLooperPreferedMode() const
 {
-    return settings.getLooperPreferredMode();
+    return settings.looperSettings.getPreferredMode();
 }
 
 inline bool MainController::getLooperAudioEncodingFlag() const
 {
-    return settings.getLooperAudioEncodingFlag();
+    return settings.looperSettings.isEncodingAudioWhenSaving();
 }
 
 inline void MainController::storeRemoteUserRememberSettings(bool boost, bool level, bool pan,
                                                             bool mute, bool lowCut)
 {
-    settings.setRemoteUserRememberingSettings(boost, level, pan, mute, lowCut);
+    settings.rememberSettings.setRememberingBoost(boost);
+    settings.rememberSettings.setRememberingLevel(level);
+    settings.rememberSettings.setRememberingPan(pan);
+    settings.rememberSettings.setRememberingMute(mute);
+    settings.rememberSettings.setRememberingLowCut(lowCut);
 }
 
 inline void MainController::storeCollapsibleSectionsRememberSettings(bool localChannels,
                                                                      bool bottomSection,
                                                                      bool chatSection)
 {
-    settings.setCollapsileSectionsRememberingSettings(localChannels, bottomSection, chatSection);
+    settings.rememberSettings.setRememberLocalChannels(localChannels);
+    settings.rememberSettings.setRememberBottomSection(bottomSection);
+    settings.rememberSettings.setRememberChatSection(chatSection);
 }
 } // namespace
 

@@ -155,7 +155,7 @@ void MainController::setSampleRate(int newSampleRate)
 
     audioMixer.setSampleRate(newSampleRate);
 
-    if (settings.isSaveMultiTrackActivated()) {
+    if (settings.recordingSettings.isSaveMultiTrackActivated()) {
         for (auto jamRecorder : jamRecorders)
             jamRecorder->setSampleRate(newSampleRate);
     }
@@ -167,12 +167,12 @@ void MainController::setSampleRate(int newSampleRate)
             inputTrack->getLooper()->stop(); // looper is stopped when sample rate is changed because the recorded material will sound funny :)
     }
 
-    settings.setSampleRate(newSampleRate);
+    settings.audioSettings.setSampleRate(newSampleRate);
 }
 
 void MainController::setEncodingQuality(float newEncodingQuality)
 {
-    settings.setEncodingQuality(newEncodingQuality);
+    settings.audioSettings.setEncodingQuality(newEncodingQuality);
 
     if (isPlayingInNinjamRoom())
         ninjamController->recreateEncoders();
@@ -208,7 +208,7 @@ void MainController::disconnectFromNinjamServer(const ServerInfo &server)
     if (mainWindow)
         mainWindow->exitFromRoom(true);
 
-    if (settings.isSaveMultiTrackActivated()) {
+    if (settings.recordingSettings.isSaveMultiTrackActivated()) {
         for (auto jamRecorder : jamRecorders)
             jamRecorder->stopRecording();
     }
@@ -248,9 +248,9 @@ void MainController::connectInNinjamServer(const ServerInfo &server)
 
     newNinjamController->start(server);
 
-    if (settings.isSaveMultiTrackActivated()) {
+    if (settings.recordingSettings.isSaveMultiTrackActivated()) {
         QString userName = getUserName();
-        QDir recordBasePath = QDir(settings.getRecordingPath());
+        QDir recordBasePath = QDir(settings.recordingSettings.getRecordingPath());
         quint16 bpm = server.getBpm();
         quint16 bpi = server.getBpi();
         float sampleRate = getSampleRate();
@@ -273,7 +273,7 @@ QMap<int, bool> MainController::getXmitChannelsFlags() const
 void MainController::handleNewNinjamInterval()
 {
     // TODO move the jamRecorder to NinjamController?
-    if (settings.isSaveMultiTrackActivated()) {
+    if (settings.recordingSettings.isSaveMultiTrackActivated()) {
         for (auto jamRecorder : jamRecorders)
             jamRecorder->newInterval();
     }
@@ -311,7 +311,7 @@ uint MainController::getFramesPerInterval() const
 
 void MainController::updateBpi(int newBpi)
 {
-    if (settings.isSaveMultiTrackActivated()) {
+    if (settings.recordingSettings.isSaveMultiTrackActivated()) {
         for (auto jamRecorder : jamRecorders)
             jamRecorder->setBpi(newBpi);
     }
@@ -319,7 +319,7 @@ void MainController::updateBpi(int newBpi)
 
 void MainController::updateBpm(int newBpm)
 {
-    if (settings.isSaveMultiTrackActivated()) {
+    if (settings.recordingSettings.isSaveMultiTrackActivated()) {
         for (auto jamRecorder : jamRecorders)
             jamRecorder->setBpm(newBpm);
     }
@@ -362,7 +362,7 @@ void MainController::enqueueAudioDataToUpload(const QByteArray &encodedData, qui
         }
     }
 
-    if (settings.isSaveMultiTrackActivated() && isPlayingInNinjamRoom()) {
+    if (settings.recordingSettings.isSaveMultiTrackActivated() && isPlayingInNinjamRoom()) {
         for (auto jamRecorder : getActiveRecorders())
             jamRecorder->appendLocalUserAudio(encodedData, channelIndex, isFirstPart);
     }
@@ -478,7 +478,7 @@ void MainController::mixGroupedInputs(int groupIndex, audio::SamplesBuffer &out)
 // this is called when a new ninjam interval is received and the 'record multi track' option is enabled
 void MainController::saveEncodedAudio(const QString &userName, quint8 channelIndex, const QByteArray &encodedAudio)
 {
-    if (settings.isSaveMultiTrackActivated()) { // just in case
+    if (settings.recordingSettings.isSaveMultiTrackActivated()) { // just in case
         for (auto jamRecorder : getActiveRecorders())
             jamRecorder->addRemoteUserAudio(userName, encodedAudio, channelIndex);
     }
@@ -565,12 +565,12 @@ void MainController::storeChatFontSizeOffset(qint8 fontSizeOffset)
 
 void MainController::storeMultiTrackRecordingStatus(bool savingMultiTracks)
 {
-    if (settings.isSaveMultiTrackActivated() && !savingMultiTracks) { // user is disabling recording multi tracks?
+    if (settings.recordingSettings.isSaveMultiTrackActivated() && !savingMultiTracks) { // user is disabling recording multi tracks?
         for (auto jamRecorder : jamRecorders)
             jamRecorder->stopRecording();
     }
 
-    settings.setSaveMultiTrack(savingMultiTracks);
+    settings.recordingSettings.setSaveMultiTrack(savingMultiTracks);
 }
 
 QMap<QString, QString> MainController::getJamRecoders() const
@@ -584,12 +584,12 @@ QMap<QString, QString> MainController::getJamRecoders() const
 
 void MainController::storeJamRecorderStatus(const QString &writerId, bool status)
 {
-    if (settings.isSaveMultiTrackActivated()) { // recording is active and changing the jamRecorder status
+    if (settings.recordingSettings.isSaveMultiTrackActivated()) { // recording is active and changing the jamRecorder status
         for (auto jamRecorder : jamRecorders) {
             if (jamRecorder->getWriterId() == writerId) {
                 if (status) {
                     if (isPlayingInNinjamRoom()) {
-                        QDir recordingPath = QDir(settings.getRecordingPath());
+                        QDir recordingPath = QDir(settings.recordingSettings.getRecordingPath());
                         auto ninjamController = getNinjamController();
                         int bpi = ninjamController->getCurrentBpi();
                         int bpm = ninjamController->getCurrentBpm();
@@ -602,13 +602,13 @@ void MainController::storeJamRecorderStatus(const QString &writerId, bool status
         }
     }
 
-    settings.setJamRecorderActivated(writerId, status);
+    settings.recordingSettings.setJamRecorderActivated(writerId, status);
 }
 
 void MainController::storeMultiTrackRecordingPath(const QString &newPath)
 {
-    settings.setMultiTrackRecordingPath(newPath);
-    if (settings.isSaveMultiTrackActivated()) {
+    settings.recordingSettings.setRecordingPath(newPath);
+    if (settings.recordingSettings.isSaveMultiTrackActivated()) {
         for (auto jamRecorder : jamRecorders)
             jamRecorder->setRecordPath(newPath);
     }
@@ -616,33 +616,35 @@ void MainController::storeMultiTrackRecordingPath(const QString &newPath)
 
 void MainController::storeDirNameDateFormat(const QString &newDateFormat)
 {
-    settings.setDirNameDateFormat(newDateFormat);
-    Qt::DateFormat dateFormat = settings.getMultiTrackRecordingSettings().getDirNameDateFormat();
-    if (settings.isSaveMultiTrackActivated()) {
+    settings.recordingSettings.setDirNameDateFormat(newDateFormat);
+    Qt::DateFormat dateFormat = settings.recordingSettings.getDirNameDateFormat();
+    if (settings.recordingSettings.isSaveMultiTrackActivated()) {
         for (auto jamRecorder : jamRecorders)
             jamRecorder->setDirNameDateFormat(dateFormat);
     }
 }
 
-void MainController::storePrivateServerSettings(const QString &server, int serverPort, const QString &password)
+void MainController::storePrivateServerSettings(const QString &server, quint16 serverPort, const QString &password)
 {
-    settings.addPrivateServer(server, serverPort, password);
+    settings.privateServerSettings.addPrivateServer(server, serverPort, password);
 }
 
 void MainController::storeMetronomeSettings(float metronomeGain, float metronomePan, bool metronomeMuted)
 {
-    settings.setMetronomeSettings(metronomeGain, metronomePan, metronomeMuted);
+    settings.metronomeSettings.setGain(metronomeGain);
+    settings.metronomeSettings.setPan(metronomePan);
+    settings.metronomeSettings.setMuted(metronomeMuted);
 }
 
 void MainController::setBuiltInMetronome(const QString &metronomeAlias)
 {
-    settings.setBuiltInMetronome(metronomeAlias);
+    settings.metronomeSettings.setBuiltInMetronome(metronomeAlias);
     recreateMetronome();
 }
 
 void MainController::setCustomMetronome(const QString &primaryBeatFile, const QString &offBeatFile, const QString &accentBeatFile)
 {
-    settings.setCustomMetronome(primaryBeatFile, offBeatFile, accentBeatFile);
+    settings.metronomeSettings.setCustomMetronome(primaryBeatFile, offBeatFile, accentBeatFile);
     recreateMetronome();
 }
 
@@ -659,27 +661,27 @@ void MainController::storeIntervalProgressShape(int shape)
 
 void MainController::storeWindowSettings(bool maximized, const QPointF &location, const QSize &size)
 {
-    settings.setWindowSettings(maximized, location, size);
+    settings.windowSettings.setMaximized(maximized);
+    settings.windowSettings.setLocation(location);
+    settings.windowSettings.setSize(size);
 }
 
 void MainController::storeIOSettings(int firstIn, int lastIn, int firstOut, int lastOut, QString audioInputDevice, QString audioOutputDevice,
                                      const QList<bool> &midiInputsStatus, const QList<bool> &syncOutputsStatus)
 {
-    settings.setAudioSettings(firstIn, lastIn, firstOut, lastOut, audioInputDevice, audioOutputDevice);
-    settings.setMidiSettings(midiInputsStatus);
-    settings.setSyncSettings(syncOutputsStatus);
+    storeIOSettings(firstIn, lastIn, firstOut, lastOut, audioInputDevice, audioOutputDevice);
+    settings.midiSettings.setInputDevicesStatus(midiInputsStatus);
+    settings.syncSettings.setOutputDevicesStatus(syncOutputsStatus);
 }
 
 void MainController::storeIOSettings(int firstIn, int lastIn, int firstOut, int lastOut, QString audioInputDevice, QString audioOutputDevice)
 {
-    storeIOSettings(
-                firstIn, lastIn,
-                firstOut, lastOut,
-                audioInputDevice, audioOutputDevice,
-                settings.getMidiInputDevicesStatus(),
-                settings.getSyncOutputDevicesStatus()
-    );
-
+    settings.audioSettings.setFirstInputIndex(firstIn);
+    settings.audioSettings.setLastInputIndex(lastIn);
+    settings.audioSettings.setFirstOutputIndex(firstOut);
+    settings.audioSettings.setLastOutputIndex(lastOut);
+    settings.audioSettings.setInputDevice(audioInputDevice);
+    settings.audioSettings.setOutputDevice(audioOutputDevice);
 }
 
 void MainController::removeTrack(long trackID)
@@ -976,7 +978,7 @@ persistence::Preset MainController::loadPreset(const QString &name)
 
 void MainController::setFullScreenView(bool fullScreen)
 {
-    settings.setFullScreenView(fullScreen);
+    settings.windowSettings.setFullScreenMode(fullScreen);
 }
 
 void MainController::setAllTracksActivation(bool activated)
@@ -1169,10 +1171,10 @@ QString MainController::getSuggestedUserName()
     return ""; // returning empty name as suggestion
 }
 
-void MainController::storeMeteringSettings(bool showingMaxPeaks, quint8 meterOption)
+void MainController::storeMeteringSettings(bool showingMaxPeaks, persistence::MeterMode meterOption)
 {
-    settings.storeMeterOption(meterOption);
-    settings.storeMeterShowingMaxPeaks(showingMaxPeaks);
+    settings.meteringSettings.setOption(meterOption);
+    settings.meteringSettings.setShowingMaxPeakMarkers(showingMaxPeaks);
 }
 
 QSharedPointer<audio::LocalInputNode> MainController::getInputTrackInGroup(quint8 groupIndex, quint8 trackIndex) const
@@ -1198,7 +1200,7 @@ QList<recorder::JamRecorder *> MainController::getActiveRecorders() const
     QList<recorder::JamRecorder *> activeRecorders;
 
     for (auto jamRecorder : jamRecorders) {
-        if (settings.isJamRecorderActivated(jamRecorder->getWriterId()))
+        if (settings.recordingSettings.isJamRecorderActivated(jamRecorder->getWriterId()))
             activeRecorders.append(jamRecorder);
     }
 

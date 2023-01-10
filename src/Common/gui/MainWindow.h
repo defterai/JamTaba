@@ -233,7 +233,7 @@ protected slots:
     void showJamtabaTranslators();
 
     // private server
-    void connectInPrivateServer(const QString &server, int serverPort, const QString &userName, const QString &password);
+    void connectInPrivateServer(const QString &server, quint16 serverPort, const QString &userName, const QString &password);
 
     // login service
     void showNewVersionAvailableMessage(const QString &versionTag, const QString &publicationDate, const QString &latestVersionDetails);
@@ -384,9 +384,6 @@ private:
     QList<login::RoomInfo> loadPrivateServersFromJson(const QFileInfo &privateServersFile);
 
     int timerID; // timer used to refresh the entire GUI: animations, peak meters, etc
-    static const quint8 DEFAULT_REFRESH_RATE;
-    static const quint8 MAX_REFRESH_RATE;
-    static const quint8 MIN_REFRESH_RATE;
 
     QPointF computeLocation() const;
 

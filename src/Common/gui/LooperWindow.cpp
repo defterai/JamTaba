@@ -4,7 +4,7 @@
 #include "gui/GuiUtils.h"
 #include "Utils.h"
 #include "MainController.h"
-#include "persistence/Settings.h"
+#include "persistence/LooperSettings.h"
 #include "file/FileUtils.h"
 #include "IconFactory.h"
 //#include "looper/LooperPersistence.h"
@@ -24,12 +24,13 @@ using controller::NinjamController;
 using audio::LoopInfo;
 using audio::LoopLoader;
 using audio::SamplesBuffer;
+using persistence::LooperMode;
 
 LooperWindow::LooperWindow(QWidget *parent, MainController *mainController) :
     QDialog(parent),
     ui(new Ui::LooperWindow),
-    mainController(mainController),
     looper(nullptr),
+    mainController(mainController),
     currentBeat(-1)
 {
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint); // remove help/question marker
@@ -98,12 +99,12 @@ void LooperWindow::changeEvent(QEvent *ev)
 
         // translate mode combo box
         for (int i = 0; i < ui->comboBoxPlayMode->count(); ++i) {
-            Looper::Mode playMode = static_cast<Looper::Mode>(ui->comboBoxPlayMode->itemData(i).toInt());
+            LooperMode playMode = static_cast<LooperMode>(ui->comboBoxPlayMode->itemData(i).toInt());
             ui->comboBoxPlayMode->setItemText(i, Looper::getModeString(playMode));
         }
 
         // translate layers pan labels (L & R)
-        for (uint l = 0; l < MAX_LOOP_LAYERS; ++l) {
+        for (uint l = 0; l < persistence::LooperSettings::MAX_LAYERS_COUNT; ++l) {
             if (layerViews.contains(l)) {
                 layerViews[l].controlsLayout->labelPanL->setText(tr("L"));
                 layerViews[l].controlsLayout->labelPanR->setText(tr("R"));
@@ -245,7 +246,7 @@ void LooperWindow::setLooper(audio::Looper *looper)
         // create wave panels and layer controls (layers view)
         quint8 currentLayers = looper->getLayers();
         auto gridLayout = qobject_cast<QGridLayout *>(ui->layersWidget->layout());
-        for (quint8 layerIndex = 0; layerIndex < MAX_LOOP_LAYERS; ++layerIndex) {
+        for (quint8 layerIndex = 0; layerIndex < persistence::LooperSettings::MAX_LAYERS_COUNT; ++layerIndex) {
             auto layerWavePanel = new LooperWavePanel(looper, layerIndex);
             auto layerControlsLayout = new LooperWindow::LayerControlsLayout(looper, layerIndex);
 
@@ -311,7 +312,7 @@ void LooperWindow::disconnectLooperSignals()
 
 void LooperWindow::handleLayerMuteStateChanged(quint8 layer, quint8 state)
 {
-    if (looper->getMode() != Looper::AllLayers)
+    if (looper->getMode() != LooperMode::AllLayers)
         return;
 
     auto muteButton = layerViews[layer].controlsLayout->muteButton;
@@ -345,7 +346,7 @@ void LooperWindow::handleModeChanged()
 
     Q_ASSERT(mainController);
     Q_ASSERT(looper);
-    mainController->storeLooperPreferredMode(static_cast<quint8>(looper->getMode()));
+    mainController->storeLooperPreferredMode(looper->getMode());
 }
 
 void LooperWindow::handleNewMaxLayers(quint8 newMaxLayers)
@@ -356,7 +357,7 @@ void LooperWindow::handleNewMaxLayers(quint8 newMaxLayers)
     const static int minHeight = 150; // one layer
     const static int maxHeight = 600; // 8 layers
     const static int range = maxHeight - minHeight;
-    int newHeight = static_cast<float>(newMaxLayers)/MAX_LOOP_LAYERS * range + minHeight;
+    int newHeight = static_cast<float>(newMaxLayers) / persistence::LooperSettings::MAX_LAYERS_COUNT * range + minHeight;
     setMinimumHeight(newHeight);
     setMaximumHeight(newHeight);
 
@@ -468,7 +469,7 @@ void LooperWindow::resetLayersControls()
 
 void LooperWindow::updateLayersVisibility(quint8 newMaxLayers)
 {
-    for (quint8 layerIndex = 0; layerIndex < MAX_LOOP_LAYERS; ++layerIndex) {
+    for (quint8 layerIndex = 0; layerIndex < persistence::LooperSettings::MAX_LAYERS_COUNT; ++layerIndex) {
         auto wavePanel = layerViews[layerIndex].wavePanel;
         bool layerIsVisible = layerIndex < newMaxLayers;
         wavePanel->setVisible(layerIsVisible);
@@ -504,7 +505,7 @@ void LooperWindow::updateControls()
         QCheckBox *lockedCheckBox = playingCheckBoxes[Looper::PlayLockedLayers];
         if (lockedCheckBox) {
             bool canEnable = lockedCheckBox->isEnabled() && looper->hasLockedLayers();
-            if (looper->getMode() == Looper::SelectedLayer) {
+            if (looper->getMode() == LooperMode::SelectedLayer) {
                 QCheckBox *hearAllCheckBox = recordingCheckBoxes[Looper::HearAllLayers];
                 if (hearAllCheckBox) {
                     canEnable &= hearAllCheckBox->isEnabled() && hearAllCheckBox->isChecked();
@@ -526,7 +527,7 @@ void LooperWindow::updateControls()
         }
 
         // update 'hear all' checkbox (in ALL layers mode this checkbox will be checked AND disabled)
-        if (looper->getMode() == Looper::AllLayers) {
+        if (looper->getMode() == LooperMode::AllLayers) {
             QCheckBox *hearAllCheckBox = recordingCheckBoxes[Looper::HearAllLayers];
             if (hearAllCheckBox) {
                 hearAllCheckBox->setChecked(true);
@@ -552,7 +553,7 @@ void LooperWindow::updateControls()
 void LooperWindow::updateButtons()
 {
     // update mute buttons
-    const bool canShowMuteButtons = looper->getMode() == Looper::AllLayers;
+    const bool canShowMuteButtons = looper->getMode() == LooperMode::AllLayers;
     for (uint l = 0; l < looper->getLayers(); ++l) {
         auto layerView = layerViews[l];
 
@@ -585,7 +586,7 @@ void LooperWindow::setMaxLayerComboBoxValuesAvailability(int valuesToDisable)
     // disable the values before last valid (non empty) layers
     const QStandardItemModel* model = qobject_cast<const QStandardItemModel*>(ui->maxLayersComboBox->model());
     const QColor disabledColor = ui->maxLayersComboBox->palette().color(QPalette::Disabled, QPalette::Text);
-    for (int l = 0; l < MAX_LOOP_LAYERS; ++l) {
+    for (int l = 0; l < persistence::LooperSettings::MAX_LAYERS_COUNT; ++l) {
         QStandardItem* item = model->item(l);
         bool disable = l < valuesToDisable;
         item->setFlags(disable ? item->flags() & ~(Qt::ItemIsSelectable|Qt::ItemIsEnabled) : Qt::ItemIsSelectable|Qt::ItemIsEnabled);
@@ -673,13 +674,8 @@ void LooperWindow::initializeControls()
     // play modes combo
     ui->comboBoxPlayMode->clear();
 
-    std::vector<Looper::Mode> playModes;
-    playModes.push_back(Looper::Sequence);
-    playModes.push_back(Looper::AllLayers);
-    playModes.push_back(Looper::SelectedLayer);
-
-    for (uint i = 0; i < playModes.size(); ++i) {
-        Looper::Mode playMode = playModes[i];
+    for (uint i = 0; i < persistence::LooperSettings::LOOPER_MODES.size(); ++i) {
+        LooperMode playMode = persistence::LooperSettings::LOOPER_MODES[i];
         ui->comboBoxPlayMode->addItem(Looper::getModeString(playMode), qVariantFromValue(playMode));
     }
 
@@ -688,7 +684,7 @@ void LooperWindow::initializeControls()
 
     // max layer combobox
     ui->maxLayersComboBox->clear();
-    for (quint8 l = 1; l <= MAX_LOOP_LAYERS; ++l) {
+    for (quint8 l = 1; l <= persistence::LooperSettings::MAX_LAYERS_COUNT; ++l) {
         ui->maxLayersComboBox->addItem(QString::number(l), QVariant::fromValue(l));
     }
 
@@ -722,7 +718,7 @@ void LooperWindow::initializeControls()
 
     connect(ui->comboBoxPlayMode, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), [=](int index) {
         if (index >= 0 && looper) {
-            looper->setMode(ui->comboBoxPlayMode->currentData().value<Looper::Mode>());
+            looper->setMode(ui->comboBoxPlayMode->currentData().value<LooperMode>());
             ui->comboBoxPlayMode->clearFocus();
         }
     });
@@ -768,9 +764,9 @@ void LooperWindow::showSaveDialogs()
 
     auto settings = mainController->getSettings();
     auto ninjamController = mainController->getNinjamController();
-    QString savePath = settings.getLooperSavePath();
+    QString savePath = settings.looperSettings.getLoopsFolder();
     bool encodeInOggVorbis = mainController->getLooperAudioEncodingFlag();
-    float vorbisQuality = settings.getEncodingQuality();
+    float vorbisQuality = settings.audioSettings.getEncodingQuality();
     uint sampleRate = mainController->getSampleRate();
     uint bpm = ninjamController->getCurrentBpm();
     uint bpi = ninjamController->getCurrentBpi();
@@ -878,7 +874,7 @@ void LooperWindow::showLoadMenu()
     auto ninjamController = mainController->getNinjamController();
     quint16 currentBpm = ninjamController->getCurrentBpm();
 
-    QString loopsDir = mainController->getSettings().getLooperSavePath();
+    QString loopsDir = mainController->getSettings().looperSettings.getLoopsFolder();
     QList<LoopInfo> loopsInfos = LoopLoader::loadLoopsInfo(loopsDir, currentBpm);
 
     QString matchedMenuText = (!loopsInfos.isEmpty()) ? (tr("%1 BPM loops").arg(currentBpm)) : (tr("No loops for %1 BPM").arg(currentBpm));
@@ -933,14 +929,14 @@ void LooperWindow::loadAudioFiles(const QStringList &audioFilePaths)
     }
 
     // loading more than one file
-    bool canLoad = looper->getLastValidLayer() < (MAX_LOOP_LAYERS - 1);
+    bool canLoad = looper->getLastValidLayer() < (persistence::LooperSettings::MAX_LAYERS_COUNT - 1);
     if (canLoad) {
         quint8 firstLayerIndex = looper->getLastValidLayer() + 1;
         if (looper->isEmpty())
             firstLayerIndex = 0;
         else if (firstLayerIndex >= looper->getLayers()) {
             firstLayerIndex = looper->getLayers(); // last layer
-            const quint8 newLayersCount = qMin(static_cast<quint8>(MAX_LOOP_LAYERS), static_cast<quint8>(audioFilePaths.size()));
+            const quint8 newLayersCount = qMin(persistence::LooperSettings::MAX_LAYERS_COUNT, static_cast<quint8>(audioFilePaths.size()));
             looper->setLayers(newLayersCount); // expand layer count before add loaded samples
         }
         loadAudioFilesIntoLayer(audioFilePaths, firstLayerIndex);

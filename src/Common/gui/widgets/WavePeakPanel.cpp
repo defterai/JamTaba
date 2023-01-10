@@ -7,15 +7,17 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 
+#include "persistence/Settings.h"
+
 WavePeakPanel::WavePeakPanel(QWidget *parent) :
     QWidget(parent),
-    maxPeaks(0),
-    showingBuffering(false),
-    bufferingPercentage(0),
+    useAlphaInPreviousSamples(true),
     peaksColor(QColor(90, 90, 90)),
     loadingColor(Qt::gray),
-    drawingMode(WavePeakPanel::PIXELED_BUILDINGS),
-    useAlphaInPreviousSamples(true)
+    showingBuffering(false),
+    bufferingPercentage(0),
+    maxPeaks(0),
+    drawingMode(persistence::WaveDrawingMode::PixeledBuildings)
 {
     setAutoFillBackground(false);
     recreatePeaksArray();
@@ -33,7 +35,7 @@ void WavePeakPanel::setPeaksColor(const QColor &color)
     update();
 }
 
-void WavePeakPanel::setDrawingMode(WaveDrawingMode mode)
+void WavePeakPanel::setDrawingMode(persistence::WaveDrawingMode mode)
 {
     this->drawingMode = mode;
     recreatePeaksArray();
@@ -219,7 +221,7 @@ void WavePeakPanel::paintBuildings(QPainter &painter, bool pixeled, bool useAlph
 
 int WavePeakPanel::getPeaksPad() const
 {
-    if (drawingMode == WavePeakPanel::SOUND_WAVE)
+    if (drawingMode == persistence::WaveDrawingMode::SoundWave)
         return 0;
 
     return 1;
@@ -227,7 +229,8 @@ int WavePeakPanel::getPeaksPad() const
 
 int WavePeakPanel::getPeaksWidth() const
 {
-   if (drawingMode == PIXELED_SOUND_WAVE || drawingMode == PIXELED_BUILDINGS)
+   if (drawingMode == persistence::WaveDrawingMode::PixeledSoundWave ||
+           drawingMode == persistence::WaveDrawingMode::PixeledBuildings)
        return 5;
 
     return 2; // returning same value for all WavePeakPanelModes
@@ -282,16 +285,16 @@ void WavePeakPanel::paintEvent(QPaintEvent *event)
 
         if (!showingBuffering) {
             switch (drawingMode) {
-            case WavePeakPanel::BUILDINGS:
+            case persistence::WaveDrawingMode::Buildings:
                 paintBuildings(painter, false, useAlphaInPreviousSamples);
                 break;
-            case WavePeakPanel::SOUND_WAVE:
+            case persistence::WaveDrawingMode::SoundWave:
                 paintSoundWave(painter, useAlphaInPreviousSamples);
                 break;
-            case WavePeakPanel::PIXELED_SOUND_WAVE:
+            case persistence::WaveDrawingMode::PixeledSoundWave:
                 paintPixeledSoundWave(painter);
                 break;
-            case WavePeakPanel::PIXELED_BUILDINGS:
+            case persistence::WaveDrawingMode::PixeledBuildings:
                 paintBuildings(painter, true, useAlphaInPreviousSamples);
                 break;
             }

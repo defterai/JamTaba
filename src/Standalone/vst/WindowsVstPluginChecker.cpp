@@ -18,13 +18,14 @@ private:
 //implementation for the windows version of this function. Another version is implemented in the MacVstPluginChecker.cpp file.
 bool Vst::PluginChecker::isValidPluginFile(const QString &pluginPath)
 {
-    if(!QFileInfo(pluginPath).isFile())
+    QFileInfo pluginFileInfo(pluginPath);
+    if(!pluginFileInfo.isFile())
         return false;
 
     if(!QLibrary::isLibrary(pluginPath))
         return false;
 
-    if(QFileInfo(pluginPath).fileName().contains("Jamtaba"))//avoid Jamtaba standalone loading Jamtaba plugin. This is just a basic check, when the VSt plugin is loaded the real (compiled) name of the plugin is checked again.
+    if(pluginFileInfo.fileName().contains("Jamtaba"))//avoid Jamtaba standalone loading Jamtaba plugin. This is just a basic check, when the VSt plugin is loaded the real (compiled) name of the plugin is checked again.
         return false;
 
 #ifdef _WIN64
@@ -38,14 +39,18 @@ bool Vst::PluginChecker::isValidPluginFile(const QString &pluginPath)
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+const quint16 IMAGE_FILE_MACHINE_UNKNOWN = 0;
+const quint16 IMAGE_FILE_MACHINE_I386 = 0x14c;
+const quint16 IMAGE_FILE_MACHINE_AMD64 = 0x8664;
+
 bool ExecutableFormatChecker::is32Bits(const QString &dllPath)
 {
-    return getMachineHeader(dllPath) == 0x14c;// i386
+    return getMachineHeader(dllPath) == IMAGE_FILE_MACHINE_I386;
 }
 
 bool ExecutableFormatChecker::is64Bits(const QString &dllPath)
 {
-    return getMachineHeader(dllPath) == 0x8664;// AMD64
+    return getMachineHeader(dllPath) == IMAGE_FILE_MACHINE_AMD64;
 }
 
 quint16 ExecutableFormatChecker::getMachineHeader(const QString &dllPath)
@@ -57,17 +62,19 @@ quint16 ExecutableFormatChecker::getMachineHeader(const QString &dllPath)
 
     QFile dllFile(dllPath);
     if (!dllFile.open(QFile::ReadOnly))
-        return 0;
-    dllFile.seek(0x3c);
+        return IMAGE_FILE_MACHINE_UNKNOWN;
+    if (!dllFile.seek(0x3c))
+        return IMAGE_FILE_MACHINE_UNKNOWN;
     QDataStream dataStream(&dllFile);
     dataStream.setByteOrder(QDataStream::LittleEndian);
     qint32 peOffset;
     dataStream >> peOffset;
-    dllFile.seek(peOffset);
+    if (!dllFile.seek(peOffset))
+        return IMAGE_FILE_MACHINE_UNKNOWN;
     quint32 peHead;
     dataStream >> peHead;
     if (peHead != 0x00004550) // "PE\0\0", little-endian
-        return 0; // "Can't find PE header"
+        return IMAGE_FILE_MACHINE_UNKNOWN; // "Can't find PE header"
 
     quint16 machineType;
     dataStream >> machineType;

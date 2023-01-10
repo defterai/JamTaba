@@ -137,13 +137,12 @@ namespace controller
 
         void openExternalAudioControlPanel();
 
-        void connectInNinjamServer(const ServerInfo &server) override;
+        void connectInNinjamServer(const ninjam::client::ServerInfo &server) override;
 
     protected:
         midi::MidiDriver *createMidiDriver();
 
-        // TODO - Audio driver need just the audio settings to initialize, not the entire settings.
-        QSharedPointer<audio::AudioDriver> createAudioDriver(const persistence::Settings &settings);
+        QSharedPointer<audio::AudioDriver> createAudioDriver(const persistence::AudioSettings &settings);
 
         controller::NinjamController *createNinjamController() override;
 

@@ -4,6 +4,7 @@
 #include "audio/vorbis/VorbisEncoder.h"
 #include "file/FileReaderFactory.h"
 #include "audio/SamplesBufferResampler.h"
+#include "persistence/LooperSettings.h"
 #include "Utils.h"
 
 #include <QtConcurrent/QtConcurrent>
@@ -71,16 +72,6 @@ LoopSaver::LoopSaver(const QString &savePath, Looper *looper) :
 
 }
 
-QList<quint8> LoopSaver::getLockedLayers(Looper *looper)
-{
-    QList<quint8> lockedLayers;
-    for (int l = 0; l < looper->getLayers(); ++l) {
-        if (looper->layerIsLocked(l))
-            lockedLayers << l;
-    }
-    return lockedLayers;
-}
-
 void LoopSaver::save(const QString &loopFileName, uint bpm, uint bpi, bool encodeInOggVorbis, float vorbisQuality, uint sampleRate, quint8 bitDepth)
 {
     QDir loopDir(QDir(savePath).absoluteFilePath(loopFileName));
@@ -133,7 +124,7 @@ void LoopSaver::save(const QString &loopFileName, uint bpm, uint bpi, bool encod
 void LoopSaver::saveSamplesToDisk(const QString &savePath, const QString &loopFileName, const SamplesBuffer &buffer, quint8 layerIndex, bool encodeInOggVorbis, float vorbisQuality, uint sampleRate, quint8 bitDepth)
 {
     Q_ASSERT(!loopFileName.isEmpty() && !loopFileName.isNull());
-    Q_ASSERT(layerIndex < MAX_LOOP_LAYERS);
+    Q_ASSERT(layerIndex < persistence::LooperSettings::MAX_LAYERS_COUNT);
     Q_ASSERT(!savePath.isEmpty());
 
     if (!encodeInOggVorbis) {
@@ -174,7 +165,7 @@ void LoopLoader::load(LoopInfo loopInfo, Looper *looper, uint currentSampleRate,
     looper->setLoading(true);
 
     looper->stop();
-    looper->setMode(static_cast<Looper::Mode>(loopInfo.getLooperMode()));
+    looper->setMode(static_cast<persistence::LooperMode>(loopInfo.getLooperMode()));
     looper->setLayers(loopInfo.getLayersCount());
 
     bool audioIsEncoded = loopInfo.audioIsEncoded();

@@ -1,15 +1,11 @@
 #include "PrivateServerDialog.h"
 #include "ui_PrivateServerDialog.h"
-#include "MainController.h"
-#include "persistence/Settings.h"
+#include "persistence/PrivateServerSettings.h"
 #include <QDebug>
 
-using controller::MainController;
-
-PrivateServerDialog::PrivateServerDialog(QWidget *parent, MainController *mainController) :
+PrivateServerDialog::PrivateServerDialog(QWidget *parent, const persistence::PrivateServerSettings& settings, const QString& userName) :
     QDialog(parent),
-    ui(new Ui::PrivateServerDialog),
-    mainController(mainController)
+    ui(new Ui::PrivateServerDialog)
 {
     ui->setupUi(this);
 
@@ -19,13 +15,12 @@ PrivateServerDialog::PrivateServerDialog(QWidget *parent, MainController *mainCo
     setAttribute(Qt::WA_DeleteOnClose);
     setWindowFlags((windowFlags() | Qt::WindowMinMaxButtonsHint) & ~Qt::WindowContextHelpButtonHint);
 
-    buildComboBoxItems();
+    buildComboBoxItems(settings);
 
     // setting initial values
-    const auto &settings = mainController->getSettings();
-    ui->textFieldPassword->setText(settings.getLastPrivateServerPassword());
-    ui->textFieldPort->setText(QString::number(settings.getLastPrivateServerPort()));
-    ui->textFieldUserName->setText(mainController->getUserName());
+    ui->textFieldPassword->setText(settings.getLastPassword());
+    ui->textFieldPort->setText(QString::number(settings.getLastPort()));
+    ui->textFieldUserName->setText(userName);
 
     ui->textFieldUserName->forceCenterAlignment(false);
     ui->textFieldUserName->setAlignment(Qt::AlignLeft);
@@ -36,11 +31,11 @@ PrivateServerDialog::PrivateServerDialog(QWidget *parent, MainController *mainCo
     ui->textFieldPort->setAttribute(Qt::WA_MacShowFocusRect, 0); // remove focus border in Mac
 }
 
-void PrivateServerDialog::buildComboBoxItems()
+void PrivateServerDialog::buildComboBoxItems(const persistence::PrivateServerSettings& settings)
 {
     ui->comboBoxServers->clear();
-    QList<QString> servers = mainController->getSettings().getLastPrivateServers();
-    for (const QString &server : servers) {
+    const QList<QString>& servers = settings.getLastServers();
+    for (const QString &server : qAsConst(servers)) {
         ui->comboBoxServers->addItem(server, server);
     }
 }

@@ -99,16 +99,10 @@ LocalInputNode::~LocalInputNode()
 
 Looper *LocalInputNode::createLooper(controller::MainController *controller)
 {
-    quint8 preferrredMode = controller->getLooperPreferedMode();
+    persistence::LooperMode preferrredMode = controller->getLooperPreferedMode();
     quint8 preferredLayersCount = controller->getLooperPreferedLayersCount();
 
-    if (preferrredMode > Looper::SelectedLayer)
-        preferrredMode = Looper::SelectedLayer;
-
-    if (preferredLayersCount > MAX_LOOP_LAYERS)
-        preferredLayersCount = MAX_LOOP_LAYERS;
-
-    return new audio::Looper(static_cast<Looper::Mode>(preferrredMode), preferredLayersCount);
+    return new audio::Looper(preferrredMode, preferredLayersCount);
 }
 
 void LocalInputNode::stopLooper()

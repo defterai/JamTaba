@@ -400,7 +400,7 @@ QSharedPointer<audio::MetronomeTrackNode> NinjamController::createMetronomeTrack
     audio::SamplesBuffer accentBeatBuffer(2);
     if (!(mainController->isUsingCustomMetronomeSounds()))
     {
-        QString builtInMetronomeAlias = mainController->getSettings().getBuiltInMetronome();
+        const QString& builtInMetronomeAlias = mainController->getSettings().metronomeSettings.getBuiltInMetronomeAlias();
         audio::metronomeUtils::createBuiltInSounds(builtInMetronomeAlias, firstBeatBuffer,
                                                    offBeatBuffer, accentBeatBuffer, sampleRate);
     }
@@ -569,13 +569,12 @@ void NinjamController::start(const ServerInfo &server)
         // add a sine wave generator as input to test audio transmission
         // mainController->addInputTrackNode(new Audio::LocalInputTestStreamer(440, mainController->getAudioDriverSampleRate()));
 
+        const auto& metronomeSettings = mainController->getSettings().metronomeSettings;
+
         mainController->addTrack(METRONOME_TRACK_ID, this->metronomeTrackNode);
-        mainController->setTrackMute(METRONOME_TRACK_ID,
-                                     mainController->getSettings().getMetronomeMuteStatus());
-        mainController->setTrackGain(METRONOME_TRACK_ID,
-                                     mainController->getSettings().getMetronomeGain());
-        mainController->setTrackPan(METRONOME_TRACK_ID,
-                                    mainController->getSettings().getMetronomePan());
+        mainController->setTrackMute(METRONOME_TRACK_ID, metronomeSettings.isMuted());
+        mainController->setTrackGain(METRONOME_TRACK_ID, metronomeSettings.getGain());
+        mainController->setTrackPan(METRONOME_TRACK_ID, metronomeSettings.getPan());
 
         mainController->addTrack(MIDI_SYNC_TRACK_ID, this->midiSyncTrackNode);
 

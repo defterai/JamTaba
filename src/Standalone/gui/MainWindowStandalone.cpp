@@ -109,20 +109,20 @@ void MainWindowStandalone::doWindowInitialization()
     MainWindow::doWindowInitialization();
 
     auto settings = mainController->getSettings();
-    if (settings.windowsWasFullScreenViewMode()) {
+    if (settings.windowSettings.isFullScreenMode()) {
         setFullScreenStatus(true);
     } else { // not full screen. Is maximized or normal?
-        if (settings.windowWasMaximized()) {
+        if (settings.windowSettings.isMaximized()) {
             qCDebug(jtGUI)<< "setting window state to maximized";
             showMaximized();
         }
-        readWindowSettings(settings.windowWasMaximized()); // restore saved position, size and state settings for standalone app.
+        readWindowSettings(settings.windowSettings.isMaximized()); // restore saved position, size and state settings for standalone app.
     }
 }
 
 void MainWindowStandalone::restoreWindowPosition()
 {
-    QPointF location = mainController->getSettings().getLastWindowLocation();
+    const QPointF& location = mainController->getSettings().windowSettings.getLocation();
     auto desktop = QApplication::desktop();
 
     int desktopWidth = desktop->width();
@@ -224,12 +224,12 @@ void MainWindowStandalone::sanitizeSubchannelInputSelections(LocalTrackView *sub
 {
     int trackID = subChannelView->getInputIndex();
     if (subChannel.isMidi()) {
-        qint8 transpose = subChannel.transpose;
-        quint8 lowerNote = subChannel.lowerMidiNote;
-        quint8 higherNote = subChannel.higherMidiNote;
+        qint8 transpose = subChannel.getTranspose();
+        quint8 lowerNote = subChannel.getLowerMidiNote();
+        quint8 higherNote = subChannel.getHigherMidiNote();
 
-        if (midiDeviceIsValid(subChannel.midiDevice)) {
-            controller->setInputTrackToMIDI(trackID, subChannel.midiDevice, subChannel.midiChannel,
+        if (midiDeviceIsValid(subChannel.getMidiDevice())) {
+            controller->setInputTrackToMIDI(trackID, subChannel.getMidiDevice(), subChannel.getMidiChannel(),
                                             transpose, lowerNote, higherNote);
         } else {
             if (controller->getMidiDriver()->hasInputDevices()) {
@@ -242,9 +242,9 @@ void MainWindowStandalone::sanitizeSubchannelInputSelections(LocalTrackView *sub
     } else if (subChannel.isNoInput()) {
         controller->setInputTrackToNoInput(trackID);
     } else if (subChannel.isMono()) {
-        controller->setInputTrackToMono(trackID, subChannel.firstInput);
+        controller->setInputTrackToMono(trackID, subChannel.getFirstInput());
     } else {
-        controller->setInputTrackToStereo(trackID, subChannel.firstInput);
+        controller->setInputTrackToStereo(trackID, subChannel.getFirstInput());
     }
 }
 
@@ -253,9 +253,9 @@ void MainWindowStandalone::restoreLocalSubchannelPluginsList(
 {
     // create the plugins list
     for (const auto &plugin : subChannel.getPlugins()) {
-        auto category = static_cast<audio::PluginDescriptor::Category>(plugin.category);
+        auto category = static_cast<audio::PluginDescriptor::Category>(plugin.getCategory());
 
-        audio::PluginDescriptor descriptor(plugin.name, category, plugin.manufacturer, plugin.path);
+        audio::PluginDescriptor descriptor(plugin.getName(), category, plugin.getManufacturer(), plugin.getPath());
         quint32 inputTrackIndex = subChannelView->getInputIndex();
         qint32 pluginSlotIndex = subChannelView->getPluginFreeSlotIndex();
         if (pluginSlotIndex >= 0) {
@@ -264,15 +264,15 @@ void MainWindowStandalone::restoreLocalSubchannelPluginsList(
             if (pluginInstance) {
                 try
                 {
-                    pluginInstance->restoreFromSerializedData(plugin.data);
+                    pluginInstance->restoreFromSerializedData(plugin.getData());
                 }
                 catch (...)
                 {
                     qWarning() << "Exception restoring " << pluginInstance->getName();
                 }
-                subChannelView->addPlugin(pluginInstance, pluginSlotIndex, plugin.bypassed);
+                subChannelView->addPlugin(pluginInstance, pluginSlotIndex, plugin.isBypassed());
             } else {
-                qCritical() << "can´t create plugin instance! " << plugin.name;
+                qCritical() << "can´t create plugin instance! " << plugin.getName();
             }
             // QApplication::processEvents();
         }
@@ -291,7 +291,7 @@ void MainWindowStandalone::initializeLocalSubChannel(LocalTrackView *subChannelV
 
     restoreLocalSubchannelPluginsList(trackView, subChannel);
 
-    trackView->setMidiRouting(subChannel.routingMidiToFirstSubchannel);
+    trackView->setMidiRouting(subChannel.isRoutingMidiToFirstSubchannel());
 }
 
 LocalTrackGroupViewStandalone *MainWindowStandalone::createLocalTrackGroupView(int channelGroupIndex)
@@ -303,8 +303,10 @@ QList<persistence::Plugin> buildPersistentPluginList(QList<QSharedPointer<audio:
 {
     QList<persistence::Plugin> persistentPlugins;
     for (const auto& p : trackPlugins) {
-        QByteArray serializedData = p->getSerializedData();
-        persistence::Plugin plugin(p->getDescriptor(), p->isBypassed(), serializedData);
+        auto plugin = persistence::Plugin::Builder(p->getDescriptor())
+                .setBypassed(p->isBypassed())
+                .setData(p->getSerializedData())
+                .build();
         persistentPlugins.append(plugin);
     }
     return persistentPlugins;
@@ -316,30 +318,31 @@ LocalInputTrackSettings MainWindowStandalone::getInputsSettings() const
     LocalInputTrackSettings baseSettings = MainWindow::getInputsSettings();
 
     // recreate the settings including the plugins
-    LocalInputTrackSettings settings;
-    Q_ASSERT(getChannelGroupsCount() == baseSettings.channels.size());
+    LocalInputTrackSettings::Builder settingsBuilder;
+    Q_ASSERT(getChannelGroupsCount() == baseSettings.getChannels().size());
 
     int channelID = 0;
-    for (const Channel &channel : qAsConst(baseSettings.channels)) {
+    for (const Channel &channel : baseSettings.getChannels()) {
         auto trackGroupView = getLocalChannel<LocalTrackGroupViewStandalone>(channelID++);
         if (!trackGroupView)
             continue;
-        Channel newChannel = channel;
-        newChannel.subChannels.clear();
+        Channel::Builder channelBuilder;
+        channelBuilder.setInstrumentIndex(channel.getInstrumentIndex());
         int subChannelID = 0;
-        for (const SubChannel& subchannel : channel.subChannels) {
+        for (const SubChannel& subchannel : channel.getSubChannels()) {
             SubChannel newSubChannel = subchannel;
             LocalTrackViewStandalone *trackView = trackGroupView->getTrack<LocalTrackViewStandalone>(subChannelID);
-            if (trackView)
+            if (trackView) {
                 newSubChannel.setPlugins(buildPersistentPluginList(trackView->getInsertedPlugins()));
-
+            }
             subChannelID++;
-            newChannel.subChannels.append(newSubChannel);
+            channelBuilder.addSubChannel(newSubChannel);
         }
-        settings.channels.append(newChannel);
+
+        settingsBuilder.addChannel(channelBuilder.build());
     }
 
-    return settings;
+    return settingsBuilder.build();
 }
 
 NinjamRoomWindow *MainWindowStandalone::createNinjamWindow(const login::RoomInfo &roomInfo, MainController *mainController)
@@ -433,8 +436,8 @@ void MainWindowStandalone::restartAudioAndMidi()
     Q_ASSERT(midiDriver);
     Q_ASSERT(audioDriver);
 
-    midiDriver->start(controller->getSettings().getMidiInputDevicesStatus(),
-                      controller->getSettings().getSyncOutputDevicesStatus());
+    midiDriver->start(controller->getSettings().midiSettings.getInputDevicesStatus(),
+                      controller->getSettings().syncSettings.getOutputDevicesStatus());
     audioDriver->start();
 }
 
@@ -444,10 +447,10 @@ void MainWindowStandalone::initializePluginFinder()
 
     controller->clearPluginsList();
 
-    controller->initializeVstPluginsList(settings.getVstPluginsPaths()); // load the cached plugins. The cache can be empty.
+    controller->initializeVstPluginsList(settings.vstSettings.getPluginPaths()); // load the cached plugins. The cache can be empty.
 
 #ifdef Q_OS_MAC
-    controller->initializeAudioUnitPluginsList(settings.getAudioUnitsPaths());
+    controller->initializeAudioUnitPluginsList(settings.audioUnitSettings.getPluginPaths());
 
     // always checking for new AU plugins
     controller->scanAudioUnitPlugins();
@@ -455,7 +458,7 @@ void MainWindowStandalone::initializePluginFinder()
 
     // checking for new plugins...
     if (controller->vstScanIsNeeded()) { // no vsts in database cache or new plugins detected in scan folders?
-        if (settings.getVstScanFolders().isEmpty())
+        if (settings.vstSettings.getPluginScanPaths().isEmpty())
             controller->addDefaultPluginsScanPath();
         controller->scanOnlyNewVstPlugins();
     }

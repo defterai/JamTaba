@@ -98,7 +98,7 @@ void PreferencesDialog::initialize(PreferencesTab initialTab, const persistence:
     myRadioButton->setText(nowString);
     myRadioButton->setProperty("buttonGroup", "rbDateFormat");
     ui->layoutDateFormats->addWidget(myRadioButton);
-    jamDateFormatRadioButtons[myRadioButton] = "Qt::TextDate";
+    jamDateFormatRadioButtons[myRadioButton] = persistence::MultiTrackRecordingSettings::DATE_FORMAT_TEXT;
 
     dateFormat = Qt::ISODate;
     nowString = "Jam-" + now.toString(dateFormat).replace(QRegExp("[/:]"), "-").replace(QRegExp("[ ]"), "_");
@@ -107,7 +107,7 @@ void PreferencesDialog::initialize(PreferencesTab initialTab, const persistence:
     myRadioButton->setText(nowString);
     myRadioButton->setProperty("buttonGroup", "rbDateFormat");
     ui->layoutDateFormats->addWidget(myRadioButton);
-    jamDateFormatRadioButtons[myRadioButton] = "Qt::ISODate";
+    jamDateFormatRadioButtons[myRadioButton] = persistence::MultiTrackRecordingSettings::DATE_FORMAT_ISO;
 
     setupSignals();
 
@@ -212,7 +212,7 @@ void PreferencesDialog::populateEncoderQualityComboBox()
 
     //select the correct item in combobox
     if (!usingCustomQuality) {
-        float quality = settings->getEncodingQuality();
+        float quality = settings->audioSettings.getEncodingQuality();
         if (qFuzzyCompare(quality, vorbis::EncoderQualityLow))
             ui->comboBoxEncoderQuality->setCurrentIndex(0);
         else if (qFuzzyCompare(quality, vorbis::EncoderQualityNormal))
@@ -227,7 +227,7 @@ void PreferencesDialog::populateEncoderQualityComboBox()
 
 bool PreferencesDialog::usingCustomEncodingQuality()
 {
-    float currentQuality = settings->getEncodingQuality();
+    float currentQuality = settings->audioSettings.getEncodingQuality();
 
     if (qFuzzyCompare(currentQuality, vorbis::EncoderQualityLow))
         return false;
@@ -252,15 +252,16 @@ void PreferencesDialog::populateAllTabs()
 
 void PreferencesDialog::populateRememberTab()
 {
-    ui->checkBoxRememberBoost->setChecked(settings->isRememberingBoost());
-    ui->checkBoxRememberLevel->setChecked(settings->isRememberingLevel());
-    ui->checkBoxRememberPan->setChecked(settings->isRememberingPan());
-    ui->checkBoxRememberMute->setChecked(settings->isRememberingMute());
-    ui->checkBoxRememberLowCut->setChecked(settings->isRememberingLowCut());
+    const auto& rememberSettings = settings->rememberSettings;
+    ui->checkBoxRememberBoost->setChecked(rememberSettings.isRememberingBoost());
+    ui->checkBoxRememberLevel->setChecked(rememberSettings.isRememberingLevel());
+    ui->checkBoxRememberPan->setChecked(rememberSettings.isRememberingPan());
+    ui->checkBoxRememberMute->setChecked(rememberSettings.isRememberingMute());
+    ui->checkBoxRememberLowCut->setChecked(rememberSettings.isRememberingLowCut());
 
-    ui->checkBoxRememberLocalChannels->setChecked(settings->isRememberingLocalChannels());
-    ui->checkBoxRememberBottomSection->setChecked(settings->isRememberingBottomSection());
-    ui->checkBoxRememberChatSection->setChecked(settings->isRememberingChatSection());
+    ui->checkBoxRememberLocalChannels->setChecked(rememberSettings.isRememberLocalChannels());
+    ui->checkBoxRememberBottomSection->setChecked(rememberSettings.isRememberBottomSection());
+    ui->checkBoxRememberChatSection->setChecked(rememberSettings.isRememberChatSection());
 }
 
 void PreferencesDialog::populateLooperTab()
@@ -269,14 +270,14 @@ void PreferencesDialog::populateLooperTab()
     QSignalBlocker radioButtonSignalBlocker(ui->radioButtonLooperOggEncoding);
     QSignalBlocker bitDepthCheckBoxBlocker(ui->comboBoxBitRate);
 
-    ui->lineEditLoopsFolder->setText(settings->getLooperFolder());
-    ui->radioButtonLooperOggEncoding->setChecked(settings->getLooperAudioEncodingFlag());
+    ui->lineEditLoopsFolder->setText(settings->looperSettings.getLoopsFolder());
+    ui->radioButtonLooperOggEncoding->setChecked(settings->looperSettings.isEncodingAudioWhenSaving());
     ui->radioButtonWaveFile->setChecked(!ui->radioButtonLooperOggEncoding->isChecked());
 
-    ui->comboBoxBitRate->setEnabled(!settings->getLooperAudioEncodingFlag());
+    ui->comboBoxBitRate->setEnabled(!settings->looperSettings.isEncodingAudioWhenSaving());
     ui->labelBitRate->setEnabled(ui->comboBoxBitRate->isEnabled());
 
-    quint8 bitDepth = settings->getLooperBitDepth();
+    quint8 bitDepth = settings->looperSettings.getWaveFilesBitDepth();
     quint8 comboBoxIndex = 0; // 16 bits
     if (bitDepth == 32)
         comboBoxIndex = 1;
@@ -293,11 +294,12 @@ void PreferencesDialog::populateMetronomeTab()
 {
     Q_ASSERT(settings);
 
-    bool usingCustomMetronomeSounds = settings->isUsingCustomMetronomeSounds();
+    bool usingCustomMetronomeSounds = settings->metronomeSettings.isUsingCustomSounds();
     ui->groupBoxCustomMetronome->setChecked(usingCustomMetronomeSounds);
     ui->groupBoxBuiltInMetronomes->setChecked(!usingCustomMetronomeSounds);
-    ui->textFieldPrimaryBeat->setText(settings->getMetronomeFirstBeatFile());
-    ui->textFieldOffBeat->setText(settings->getMetronomeOffBeatFile());
+    ui->textFieldPrimaryBeat->setText(settings->metronomeSettings.getCustomPrimaryBeatFile());
+    ui->textFieldAccentBeat->setText(settings->metronomeSettings.getCustomAccentBeatFile());
+    ui->textFieldOffBeat->setText(settings->metronomeSettings.getCustomOffBeatFile());
 
     // combo embedded metronome sounds
     auto metronomeAliases = audio::metronomeUtils::getBuiltInMetronomeAliases();
@@ -307,26 +309,26 @@ void PreferencesDialog::populateMetronomeTab()
     }
 
     // using built-in metronome?
-    if (!settings->isUsingCustomMetronomeSounds()){
-        ui->comboBuiltInMetronomes->setCurrentText(settings->getBuiltInMetronome());
+    if (!settings->metronomeSettings.isUsingCustomSounds()){
+        ui->comboBuiltInMetronomes->setCurrentText(settings->metronomeSettings.getBuiltInMetronomeAlias());
     }
 }
 
 void PreferencesDialog::populateMultiTrackRecordingTab()
 {
     Q_ASSERT(settings);
-    auto recordingSettings = settings->getMultiTrackRecordingSettings();
-    ui->recordingCheckBox->setChecked(recordingSettings.saveMultiTracksActivated);
+    const auto& recordingSettings = settings->recordingSettings;
+    ui->recordingCheckBox->setChecked(recordingSettings.isSaveMultiTrackActivated());
 
     for (auto myCheckBox : jamRecorderCheckBoxes.keys()) {
         myCheckBox->setChecked(recordingSettings.isJamRecorderActivated(jamRecorderCheckBoxes[myCheckBox]));
     }
 
     for (const QRadioButton * myRadioButton : jamDateFormatRadioButtons.keys()) {
-        ((QRadioButton *)myRadioButton)->setChecked(QString::compare(recordingSettings.dirNameDateFormat, jamDateFormatRadioButtons[myRadioButton]) == 0);
+        ((QRadioButton *)myRadioButton)->setChecked(QString::compare(recordingSettings.getDirNameDateFormatStr(), jamDateFormatRadioButtons[myRadioButton]) == 0);
     }
 
-    QDir recordDir(recordingSettings.recordingPath);
+    QDir recordDir(recordingSettings.getRecordingPath());
     ui->recordPathLineEdit->setText(recordDir.absolutePath());
 }
 

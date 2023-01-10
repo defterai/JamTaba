@@ -112,7 +112,7 @@ void PreferencesDialogStandalone::showDialogToAddVstScanFolder()
 void PreferencesDialogStandalone::clearScanFolderWidgets()
 {
     QList<ScanFolderPanel *> panels = ui->panelScanFolders->findChildren<ScanFolderPanel *>();
-    for (ScanFolderPanel *panel : panels) {
+    for (ScanFolderPanel *panel : qAsConst(panels)) {
         ui->panelScanFolders->layout()->removeWidget(panel);
         panel->deleteLater();
     }
@@ -153,7 +153,7 @@ void PreferencesDialogStandalone::setCurrentScannedVstPlugin(const QString &plug
 void PreferencesDialogStandalone::updateBlackBox()
 {
     ui->blackListWidget->clear();
-    const QStringList& badPlugins = settings->getBlackListedPlugins();
+    const QStringList& badPlugins = settings->vstSettings.getIgnoredPlugins();
     for (const QString &badPlugin : badPlugins)
         ui->blackListWidget->appendPlainText(badPlugin);
 }
@@ -189,7 +189,7 @@ void PreferencesDialogStandalone::addBlackListedPlugins()
     QFileDialog vstDialog(this, tr("Add Vst(s) to Black list ..."));
     vstDialog.setNameFilters(getVstPluginFileFilters());
 
-    const QStringList& foldersToScan = settings->getVstScanFolders();
+    const QStringList& foldersToScan = settings->vstSettings.getPluginScanPaths();
     if (!foldersToScan.isEmpty())
         vstDialog.setDirectory(foldersToScan.first());
 
@@ -210,7 +210,7 @@ void PreferencesDialogStandalone::removeBlackListedPlugins()
     QFileDialog vstDialog(this, tr("Remove Vst(s) from Black List ..."));
     vstDialog.setNameFilters(getVstPluginFileFilters());
 
-    const QStringList& foldersToScan = settings->getVstScanFolders();
+    const QStringList& foldersToScan = settings->vstSettings.getPluginScanPaths();
     if (!foldersToScan.isEmpty())
         vstDialog.setDirectory(foldersToScan.first());
 
@@ -256,7 +256,7 @@ void PreferencesDialogStandalone::populateMidiTab()
     clearWidgetLayout(ui->midiContentPanel);
     int maxInputDevices = midiDriver->getMaxInputDevices();
     if (maxInputDevices > 0) {
-        QList<bool> midiInputsStatus = settings->getMidiInputDevicesStatus();
+        const QList<bool>& midiInputsStatus = settings->midiSettings.getInputDevicesStatus();
         for (int i = 0; i < maxInputDevices; ++i) {
             QString midiDeviceName = midiDriver->getInputDeviceName(i);
             if (!midiDeviceName.isEmpty()) {
@@ -281,7 +281,7 @@ void PreferencesDialogStandalone::populateSyncTab() {
     clearWidgetLayout(ui->syncContentPanel);
     int maxOutputDevices = midiDriver->getMaxOutputDevices();
     if (maxOutputDevices > 0) {
-        QList<bool> syncOutputsStatus = settings->getSyncOutputDevicesStatus();
+        const QList<bool>& syncOutputsStatus = settings->syncSettings.getOutputDevicesStatus();
         for (int i = 0; i < maxOutputDevices; ++i) {
             QString midiDeviceName = midiDriver->getOutputDeviceName(i);
             if (!midiDeviceName.isEmpty()) {
@@ -409,7 +409,7 @@ void PreferencesDialogStandalone::populateSampleRateCombo()
     ui->comboSampleRate->clear();
 
     QList<int> sampleRates = audioDriver->getValidSampleRates(audioDriver->getAudioOutputDeviceIndex());
-    for (int sampleRate : sampleRates)
+    for (int sampleRate : qAsConst(sampleRates))
         ui->comboSampleRate->addItem(QString::number(sampleRate), sampleRate);
 
     ui->comboSampleRate->setCurrentText(QString::number(audioDriver->getSampleRate()));
@@ -420,7 +420,7 @@ void PreferencesDialogStandalone::populateBufferSizeCombo()
 {
     ui->comboBufferSize->clear();
     QList<int> bufferSizes = audioDriver->getValidBufferSizes(audioDriver->getAudioOutputDeviceIndex());
-    for (int size : bufferSizes)
+    for (int size : qAsConst(bufferSizes))
         ui->comboBufferSize->addItem(QString::number(size), size);
 
     ui->comboBufferSize->setCurrentText(QString::number(audioDriver->getBufferSize()));
@@ -496,13 +496,13 @@ void PreferencesDialogStandalone::populateVstTab()
     clearScanFolderWidgets(); // remove all widgets before add the paths
 
     // populate the paths
-    for (const QString &scanFolder : settings->getVstScanFolders())
+    for (const QString &scanFolder : settings->vstSettings.getPluginScanPaths())
         createWidgetsToNewFolder(scanFolder);
 
     // populate the VST list
     ui->vstListWidget->clear();
     ui->labelVstScanStatus->clear();
-    for (const QString &path : settings->getVstPluginsPaths()) {
+    for (const QString &path : settings->vstSettings.getPluginPaths()) {
         QString pluginName = PluginDescriptor::getVstPluginNameFromPath(path);
         addFoundedVstPlugin(pluginName);
     }
