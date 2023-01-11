@@ -72,8 +72,8 @@ private slots:
     void openMidiToolsDialog();
     void onMidiToolsDialogClosed();
 
-    void setMidiLowerNote(const QString &lowerNote);
-    void setMidiHigherNote(const QString &higherNote);
+    void setMidiLowerNote(quint8 lowerNote);
+    void setMidiHigherNote(quint8 higherNote);
     void setTranspose(qint8 transposeValue);
 
     void toggleMidiNoteLearn(bool);
@@ -104,9 +104,6 @@ private:
     void setMidiPeakMeterVisibility(bool visible);
 
     QString getInputChannelNameOnly(int inputIndex); // return the input channel name without the number/index
-
-    quint8 getMidiNoteNumber(const QString &midiNote) const;
-    QString getMidiNoteText(quint8 midiNoteNumber) const;
 
     void startMidiNoteLearn();
     void stopMidiNoteLearn();

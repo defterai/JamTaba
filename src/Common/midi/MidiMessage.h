@@ -22,7 +22,7 @@ public:
     bool isNoteOn() const;
     bool isNoteOff() const;
 
-    void transpose(qint8 semitones);
+    bool transpose(qint8 semitones);
 
     quint8 getNoteVelocity() const;
 

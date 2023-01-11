@@ -104,7 +104,7 @@ public:
     audio::Looper *getLooper() const;
 
 signals:
-    void midiNoteLearned(quint8 midiNote) const;
+    void midiNoteLearned(quint8 midiNote);
     void stereoInversionChanged(bool stereoInverted);
 
 protected:
@@ -128,22 +128,19 @@ private:
         bool isReceivingAllMidiChannels() const;
         void updateActivity(const midi::MidiMessage &message);
         bool accept(const midi::MidiMessage &message) const;
-        void setTranspose(quint8 newTranspose);
+        void setTranspose(qint8 newTranspose);
         inline bool isLearning() const { return learning; }
 
         int device; // setted when user choose MIDI as input method
         int channel;
-        quint8 lastMidiActivity;// last max velocity or control value
+        quint8 lastMidiActivity; // last max velocity or control value
         quint8 lowerNote;
         quint8 higherNote;
         qint8 transpose;
         bool learning; //is waiting to learn a midi note?
-
     };
 
     MidiInput midiInput;
-
-    quint8 getTransposeAmmount() const;
 
     int channelGroupIndex; // the group index (a group contain N LocalInputNode instances)
 

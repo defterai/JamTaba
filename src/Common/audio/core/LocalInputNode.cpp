@@ -57,11 +57,9 @@ void LocalInputNode::MidiInput::updateActivity(const midi::MidiMessage &message)
     }
 }
 
-void LocalInputNode::MidiInput::setTranspose(quint8 newTranspose)
+void LocalInputNode::MidiInput::setTranspose(qint8 newTranspose)
 {
-    if ( qAbs(newTranspose) <= 24) {
-        this->transpose = newTranspose;
-    }
+    this->transpose = newTranspose;
 }
 
 bool LocalInputNode::MidiInput::accept(const midi::MidiMessage &message) const
@@ -298,20 +296,21 @@ void LocalInputNode::setReceivingRoutedMidiInput(bool receiveRoutedMidiInput)
 
 void LocalInputNode::processIncommingMidi(std::vector<midi::MidiMessage> &inBuffer, std::vector<midi::MidiMessage> &outBuffer)
 {
-    auto iterator = inBuffer.begin();
-    while(iterator != inBuffer.end()) {
-        auto message(*iterator);
-        if (canProcessMidiMessage(message)) {
-            message.transpose(getTranspose());
-
+    for (auto iterator = inBuffer.begin(); iterator != inBuffer.end();) {
+        auto message = *iterator;
+        if (midiInput.isLearning()) {
+            if (message.isNote() || message.isControl()) {
+                quint8 midiNote = (quint8)message.getData1();
+                emit midiNoteLearned(midiNote);
+            }
+            ++iterator; // when learning all messages are bypassed
+        } else if (canProcessMidiMessage(message) &&
+                   message.transpose(getTranspose())) {
             outBuffer.push_back(message);
-
             // save the midi activity peak value for notes or controls
             midiInput.updateActivity(message);
-
             iterator = inBuffer.erase(iterator);
-        }
-        else {
+        } else {
             ++iterator;
         }
     }
@@ -322,14 +321,11 @@ qint8 LocalInputNode::getTranspose() const
     if (!receivingRoutedMidiInput) {
         return midiInput.transpose;
     }
-    else {
-        quint8 subchannelIndex = 1; // second subchannel
-        auto secondSubchannel = mainController->getInputTrackInGroup(channelGroupIndex, subchannelIndex);
-        if (secondSubchannel && secondSubchannel->isMidi()) {
-            return secondSubchannel->midiInput.transpose;
-        }
+    quint8 subchannelIndex = 1; // second subchannel
+    auto secondSubchannel = mainController->getInputTrackInGroup(channelGroupIndex, subchannelIndex);
+    if (secondSubchannel && secondSubchannel->isMidi()) {
+        return secondSubchannel->midiInput.transpose;
     }
-
     return 0;
 }
 
@@ -370,14 +366,6 @@ void LocalInputNode::setTranspose(qint8 transpose)
 
 bool LocalInputNode::canProcessMidiMessage(const midi::MidiMessage &message) const
 {
-    if (midiInput.isLearning()) {
-        if (message.isNote() || message.isControl()) {
-            quint8 midiNote = (quint8)message.getData1();
-            emit midiNoteLearned(midiNote);
-        }
-        return false; // when learning all messages are bypassed
-    }
-
     return midiInput.accept(message);
 }
 

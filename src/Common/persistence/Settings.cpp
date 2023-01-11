@@ -304,7 +304,7 @@ void Settings::load()
 Settings::Settings() :
     translation("en"), // english as default language
     theme("Navy_nm"), // flat as default theme,
-    ninjamIntervalProgressShape(0),x
+    ninjamIntervalProgressShape(0),
     masterFaderGain(1.0), 
     tracksLayoutOrientation(Qt::Vertical),
     usingNarrowedTracks(false),

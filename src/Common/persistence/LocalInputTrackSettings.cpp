@@ -1,5 +1,6 @@
 #include "LocalInputTrackSettings.h"
 #include "log/Logging.h"
+#include "Utils.h"
 #include <QJsonArray>
 #include <QFile>
 
@@ -121,9 +122,9 @@ SubChannel::Builder::Builder(const QJsonObject &in, bool skipMidiRouting):
     channelsCount(in["channelsCount"].toInt(0)),
     midiDevice(in["midiDevice"].toInt(-1)),
     midiChannel(in["midiChannel"].toInt(-1)),
-    gain(in["gain"].toDouble(1)),
-    boost(in["boost"].toInt(0)),
-    pan(in["pan"].toDouble(0)),
+    gain(Utils::clampGain(in["gain"].toDouble(1))),
+    boost(Utils::clampBoost(in["boost"].toInt(0))),
+    pan(Utils::clampPan(in["pan"].toDouble(0))),
     muted(in["muted"].toBool(false)),
     stereoInverted(in["stereoInverted"].toBool(false)),
     transpose(in["transpose"].toInt(0)),
@@ -131,6 +132,10 @@ SubChannel::Builder::Builder(const QJsonObject &in, bool skipMidiRouting):
     higherMidiNote(in["higherNote"].toInt(127)),
     routingMidiToFirstSubchannel(!skipMidiRouting && in["routingMidiInput"].toBool(false))
 {
+    // adjust transpose, low, high values
+    setTranspose(transpose);
+    setLowerMidiNote(lowerMidiNote);
+    setHigherMidiNote(higherMidiNote);
     if (in.contains("plugins")) {
         QJsonArray pluginsArray = in["plugins"].toArray();
         for (int p = 0; p < pluginsArray.size(); ++p) {
@@ -146,6 +151,53 @@ SubChannel::Builder::Builder(const QJsonObject &in, bool skipMidiRouting):
             }
         }
     }
+}
+
+SubChannel::Builder& SubChannel::Builder::setBoost(int boost)
+{
+    this->boost = Utils::clampBoost(boost);
+    return *this;
+}
+
+SubChannel::Builder& SubChannel::Builder::setGain(float gain)
+{
+    this->gain = Utils::clampGain(gain);
+    return *this;
+}
+
+SubChannel::Builder& SubChannel::Builder::setPan(float pan)
+{
+    this->pan = Utils::clampPan(pan);
+    return *this;
+}
+
+SubChannel::Builder& SubChannel::Builder::setTranspose(qint8 transpose)
+{
+    if (transpose > MAX_MIDI_TRANSPOSE)
+        this->transpose = MAX_MIDI_TRANSPOSE;
+    else if (transpose < MIN_MIDI_TRANSPOSE)
+        this->transpose = MIN_MIDI_TRANSPOSE;
+    else
+        this->transpose = transpose;
+    return *this;
+}
+
+SubChannel::Builder& SubChannel::Builder::setLowerMidiNote(quint8 lowerMidiNote)
+{
+    if (lowerMidiNote > 127)
+        this->lowerMidiNote = 127;
+    else
+        this->lowerMidiNote = lowerMidiNote;
+    return *this;
+}
+
+SubChannel::Builder& SubChannel::Builder::setHigherMidiNote(quint8 higherMidiNote)
+{
+    if (higherMidiNote > 127)
+        this->higherMidiNote = 127;
+    else
+        this->higherMidiNote = higherMidiNote;
+    return *this;
 }
 
 Channel::Channel(const Builder& builder):

@@ -34,16 +34,18 @@ MidiMessage MidiMessage::fromArray(const char array[4], qint32 deviceIndex)
     return fromVector(vector, deviceIndex);
 }
 
-void MidiMessage::transpose(qint8 semitones)
+bool MidiMessage::transpose(qint8 semitones)
 {
-    if (!isNote() || semitones == 0) {
-        return;
+    if (semitones == 0 || !isNote()) {
+        return true;
     }
-
-    quint32 newValue = data + (semitones << 8);
-    if (((newValue >> 8) & 0xFF) <= 127 ) {
-        data = newValue;
+    int noteIndex = (data >> 8) & 0xFF;
+    noteIndex += semitones;
+    if (noteIndex >= 0 && noteIndex <= 127) {
+        data = (data & ~qint32(0xFF00)) | (quint32(noteIndex) << 8);
+        return true;
     }
+    return false;
 }
 
 quint8 MidiMessage::getNoteVelocity() const

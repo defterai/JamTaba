@@ -7,6 +7,9 @@
 
 namespace persistence {
 
+static const qint8 MIN_MIDI_TRANSPOSE = -24;
+static const qint8 MAX_MIDI_TRANSPOSE = 24;
+
 class Plugin final
 {
 public:
@@ -98,21 +101,9 @@ public:
             this->midiChannel = midiChannel;
             return *this;
         }
-        inline Builder& setGain(float gain)
-        {
-            this->gain = gain;
-            return *this;
-        }
-        inline Builder& setBoost(int boost)
-        {
-            this->boost = boost;
-            return *this;
-        }
-        inline Builder& setPan(float pan)
-        {
-            this->pan = pan;
-            return *this;
-        }
+        Builder& setBoost(int boost);
+        Builder& setGain(float gain);
+        Builder& setPan(float pan);
         inline Builder& setMuted(bool muted)
         {
             this->muted = muted;
@@ -123,21 +114,9 @@ public:
             this->stereoInverted = stereoInverted;
             return *this;
         }
-        inline Builder& setTranspose(qint8 transpose)
-        {
-            this->transpose = transpose;
-            return *this;
-        }
-        inline Builder& setLowerMidiNote(quint8 lowerMidiNote)
-        {
-            this->lowerMidiNote = lowerMidiNote;
-            return *this;
-        }
-        inline Builder& setHigherMidiNote(quint8 higherMidiNote)
-        {
-            this->higherMidiNote = higherMidiNote;
-            return *this;
-        }
+        Builder& setTranspose(qint8 transpose);
+        Builder& setLowerMidiNote(quint8 lowerMidiNote);
+        Builder& setHigherMidiNote(quint8 higherMidiNote);
         inline Builder& setRoutingMidiToFirstSubchannel(bool enabled)
         {
             this->routingMidiToFirstSubchannel = enabled;

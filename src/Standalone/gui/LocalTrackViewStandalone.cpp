@@ -181,8 +181,7 @@ void LocalTrackViewStandalone::translateUI()
 void LocalTrackViewStandalone::useLearnedMidiNote(quint8 midiNote)
 {
     if (midiToolsDialog && midiToolsDialog->isVisible()) {
-        QString midiNoteName = getMidiNoteText(midiNote);
-        midiToolsDialog->setLearnedMidiNote(midiNoteName);
+        midiToolsDialog->setLearnedMidiNote(midiNote);
     }
 }
 
@@ -298,8 +297,8 @@ void LocalTrackViewStandalone::openMidiToolsDialog()
 {
     if (!midiToolsDialog) {
         qCDebug(jtGUI) << "Creating a new MidiToolsDialog!";
-        QString higherNote = getMidiNoteText(inputNode->getMidiHigherNote());
-        QString lowerNote = getMidiNoteText(inputNode->getMidiLowerNote());
+        quint8 higherNote = inputNode->getMidiHigherNote();
+        quint8 lowerNote = inputNode->getMidiLowerNote();
         qint8 transpose = inputNode->getTranspose();
         bool routingMidiInput = inputNode->isRoutingMidiInput();
 
@@ -357,72 +356,18 @@ void LocalTrackViewStandalone::setTranspose(qint8 transposeValue)
      }
 }
 
-void LocalTrackViewStandalone::setMidiHigherNote(const QString &higherNote)
+void LocalTrackViewStandalone::setMidiHigherNote(quint8 higherNote)
 {
     if (inputNode) {
-        quint8 noteNumber = getMidiNoteNumber(higherNote);
-        inputNode->setMidiHigherNote(noteNumber);
+        inputNode->setMidiHigherNote(higherNote);
     }
 }
 
-void LocalTrackViewStandalone::setMidiLowerNote(const QString &lowerNote)
+void LocalTrackViewStandalone::setMidiLowerNote(quint8 lowerNote)
 {
     if (inputNode) {
-        quint8 noteNumber = getMidiNoteNumber(lowerNote);
-        inputNode->setMidiLowerNote(noteNumber);
+        inputNode->setMidiLowerNote(lowerNote);
     }
-}
-
-QString LocalTrackViewStandalone::getMidiNoteText(quint8 midiNoteNumber) const
-{
-    int octave = midiNoteNumber/12;
-    QString noteName = "";
-    switch (midiNoteNumber % 12) {
-        case 0: noteName = QStringLiteral("C"); break;
-        case 1: noteName = QStringLiteral("C#"); break;
-        case 2: noteName = QStringLiteral("D"); break;
-        case 3: noteName = QStringLiteral("D#"); break;
-        case 4: noteName = QStringLiteral("E"); break;
-        case 5: noteName = QStringLiteral("F"); break;
-        case 6: noteName = QStringLiteral("F#"); break;
-        case 7: noteName = QStringLiteral("G"); break;
-        case 8: noteName = QStringLiteral("G#"); break;
-        case 9: noteName = QStringLiteral("A"); break;
-        case 10: noteName = QStringLiteral("A#"); break;
-        case 11: noteName = QStringLiteral("B"); break;
-    }
-    return noteName + QString::number(octave);
-}
-
-quint8 LocalTrackViewStandalone::getMidiNoteNumber(const QString &midiNote) const
-{
-    // midi note numbers: http://www.midimountain.com/midi/midi_note_numbers.html
-
-    if (midiNote.length() < 2)
-        return -1;
-
-     quint8 noteNumber = 0;
-     switch (midiNote.at(0).toLatin1()) {
-        case 'C': noteNumber = 0; break;
-        case 'D': noteNumber = 2; break;
-        case 'E': noteNumber = 4; break;
-        case 'F': noteNumber = 5; break;
-        case 'G': noteNumber = 7; break;
-        case 'A': noteNumber = 9; break;
-        case 'B': noteNumber = 11; break;
-     default: noteNumber = 0;
-         break;
-     }
-     int octave = midiNote.at( (midiNote.length() > 2) ? 2 : 1).toLatin1() - 48; // ascii to int
-
-     noteNumber += (octave * 12);
-
-     if (midiNote.contains('b'))
-         noteNumber--;
-     if (midiNote.contains('#'))
-         noteNumber++;
-
-     return noteNumber;
 }
 
 void LocalTrackViewStandalone::onMidiToolsDialogClosed()

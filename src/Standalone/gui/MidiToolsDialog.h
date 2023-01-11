@@ -13,15 +13,15 @@ class MidiToolsDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit MidiToolsDialog(const QString &lowerNote, const QString &higherNote, qint8 transpose, bool routingMidiInput);
+    explicit MidiToolsDialog(quint8 lowerNote, quint8 higherNote, qint8 transpose, bool routingMidiInput);
     ~MidiToolsDialog();
-    void setLearnedMidiNote(const QString &learnedNote);
+    void setLearnedMidiNote(quint8 learnedNote);
     void hideMidiRoutingControls();
 
 signals:
     void dialogClosed();
-    void lowerNoteChanged(const QString &newLowerNote);
-    void higherNoteChanged(const QString &newHigherNote);
+    void lowerNoteChanged(quint8 newLowerNote);
+    void higherNoteChanged(quint8 newHigherNote);
 
     void transposeChanged(qint8 newTranspose);
     void learnMidiNoteClicked(bool); // this signal is fired when the 2 learn buttons are clicked
