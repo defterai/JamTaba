@@ -11,7 +11,7 @@
 #include <QStyle>
 #include <QSlider>
 #include <QPainter>
-#include <QDesktopWidget>
+#include <QScreen>
 #include <QPainterPath>
 
 LocalTrackViewStandalone::LocalTrackViewStandalone(controller::MainControllerStandalone *mainController, int channelIndex) :
@@ -314,12 +314,14 @@ void LocalTrackViewStandalone::openMidiToolsDialog()
         connect(midiToolsDialog, &MidiToolsDialog::midiRoutingCheckBoxClicked, this, &LocalTrackViewStandalone::setMidiRouting);
     }
 
-    QRect desktopRect = QApplication::desktop()->availableGeometry();
-
+    QRect desktopRect = screen()->availableGeometry();
     QPoint point = mapToGlobal(QPoint(x() + width(), inputPanel->y()));
 
-    if (point.y() + midiToolsDialog->height() > desktopRect.height()) {
-        point.setY( desktopRect.height() - (midiToolsDialog->height() + 35)); //align in bottom with 35 pixels in margim
+    if (point.x() + midiToolsDialog->width() > desktopRect.right()) {
+        point.setX(desktopRect.right() - (midiToolsDialog->width() + 35));
+    }
+    if (point.y() + midiToolsDialog->height() > desktopRect.bottom()) {
+        point.setY(desktopRect.bottom() - (midiToolsDialog->height() + 35)); //align in bottom with 35 pixels in margim
     }
 
     midiToolsDialog->move(point);

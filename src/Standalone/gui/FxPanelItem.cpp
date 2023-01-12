@@ -14,7 +14,7 @@
 #include <QAction>
 #include <QMouseEvent>
 #include <QMenu>
-#include <QDesktopWidget>
+#include <QScreen>
 #include <QStyle>
 
 using controller::MainControllerStandalone;
@@ -278,9 +278,6 @@ void FxPanelItem::on_actionMenuTriggered(QAction *action)
 void FxPanelItem::showPluginGui(audio::Plugin *plugin)
 {
     if (plugin) {
-        QDesktopWidget desktop;
-        int hCenter = desktop.geometry().width()/2;    // - window->width();
-        int vCenter = desktop.geometry().height()/2;    // - window->height();
-        plugin->openEditor(QPoint(hCenter, vCenter));
+        plugin->openEditor(screen()->geometry().center());
     }
 }
