@@ -24,8 +24,10 @@ class FxPanelItem : public QFrame
 public:
     FxPanelItem(LocalTrackViewStandalone *parent, controller::MainControllerStandalone *mainController);
     virtual ~FxPanelItem();
-    void setPlugin(const QSharedPointer<audio::Plugin>& plugin);
-    void unsetPlugin();
+    bool setPlugin(const QSharedPointer<audio::Plugin>& plugin);
+    void attachPlugin(const QSharedPointer<audio::Plugin>& plugin);
+    QSharedPointer<audio::Plugin> detachPlugin();
+    void removePlugin();
     inline bool containPlugin() const
     {
         return plugin != nullptr;

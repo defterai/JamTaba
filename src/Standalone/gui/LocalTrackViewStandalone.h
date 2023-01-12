@@ -32,11 +32,12 @@ public:
         return fxPanel;
     }
 
-    qint32 getPluginFreeSlotIndex() const;
+    qint32 getPluginSlotIndex(const QSharedPointer<Plugin> &plugin) const;
 
     void reset() override;
 
     void addPlugin(const QSharedPointer<audio::Plugin> &plugin, quint32 slotIndex, bool bypassed = false);
+    void swapPlugins(quint32 firstSlotIndex, quint32 secondSlotIndex);
 
     QList<QSharedPointer<audio::Plugin>> getInsertedPlugins() const;
 

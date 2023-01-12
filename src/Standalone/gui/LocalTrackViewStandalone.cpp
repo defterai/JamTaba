@@ -387,9 +387,17 @@ void LocalTrackViewStandalone::addPlugin(const QSharedPointer<audio::Plugin> &pl
     }
 }
 
-qint32 LocalTrackViewStandalone::getPluginFreeSlotIndex() const
+void LocalTrackViewStandalone::swapPlugins(quint32 firstSlotIndex, quint32 secondSlotIndex)
 {
-    return fxPanel->getPluginFreeSlotIndex();
+    if (fxPanel) {
+        fxPanel->swapPlugins(firstSlotIndex, secondSlotIndex);
+        update();
+    }
+}
+
+qint32 LocalTrackViewStandalone::getPluginSlotIndex(const QSharedPointer<Plugin> &plugin) const
+{
+    return fxPanel->getPluginSlotIndex(plugin);
 }
 
 QList<QSharedPointer<audio::Plugin>> LocalTrackViewStandalone::getInsertedPlugins() const

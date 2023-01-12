@@ -28,9 +28,8 @@ public:
     virtual ~FxPanel();
 
     void addPlugin(const QSharedPointer<Plugin> &plugin, quint32 pluginSlotIndex);
-
-    qint32 getPluginFreeSlotIndex() const; // return -1 if no free slots are available
-
+    void swapPlugins(quint32 firstSlotIndex, quint32 secondSlotIndex);
+    qint32 getPluginSlotIndex(const QSharedPointer<Plugin> &plugin) const;
     void removePlugins();
 
     inline LocalTrackViewStandalone *getLocalTrackView() const

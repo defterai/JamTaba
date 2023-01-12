@@ -215,6 +215,15 @@ void AudioNode::addProcessor(const QSharedPointer<AudioNodeProcessor> &newProces
     processors[slotIndex] = newProcessor;
 }
 
+void AudioNode::swapProcessors(quint32 firstSlotIndex, quint32 secondSlotIndex)
+{
+    assert(firstSlotIndex < MAX_PROCESSORS_PER_TRACK);
+    assert(secondSlotIndex < MAX_PROCESSORS_PER_TRACK);
+    if (firstSlotIndex != secondSlotIndex) {
+        qSwap(processors[firstSlotIndex], processors[secondSlotIndex]);
+    }
+}
+
 void AudioNode::removeProcessor(const QSharedPointer<AudioNodeProcessor> &processor)
 {
     assert(processor);

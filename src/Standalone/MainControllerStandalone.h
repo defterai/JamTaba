@@ -113,6 +113,7 @@ namespace controller
             PluginDescriptor::Category category);
         QSharedPointer<Plugin> addPlugin(quint32 inputTrackIndex, quint32 pluginSlotIndex,
                                          const PluginDescriptor &descriptor);
+        void swapPlugins(quint32 inputTrackIndex, quint32 firstSlotIndex, quint32 secondSlotIndex);
 
         std::vector<midi::MidiMessage> pullMidiMessagesFromPlugins() override;
 

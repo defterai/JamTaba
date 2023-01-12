@@ -19,6 +19,11 @@
 
 using controller::MainControllerStandalone;
 
+static const int FX_MENU_ACTION_MOVE_UP = 1;
+static const int FX_MENU_ACTION_MOVE_DOWN = 2;
+static const int FX_MENU_ACTION_BYPASS = 3;
+static const int FX_MENU_ACTION_REMOVE = 4;
+
 FxPanelItem::FxPanelItem(LocalTrackViewStandalone *parent, MainControllerStandalone *mainController) :
     QFrame(parent),
     plugin(nullptr),
@@ -68,8 +73,19 @@ void FxPanelItem::updateStyleSheet()
     update();
 }
 
-void FxPanelItem::setPlugin(const QSharedPointer<audio::Plugin> &plugin)
+bool FxPanelItem::setPlugin(const QSharedPointer<audio::Plugin>& plugin)
 {
+    if (plugin && !this->plugin) {
+        attachPlugin(plugin);
+        return true;
+    }
+    return this->plugin == plugin;
+}
+
+void FxPanelItem::attachPlugin(const QSharedPointer<audio::Plugin> &plugin)
+{
+    assert(plugin);
+    assert(!this->plugin);
     this->plugin = plugin;
     this->label->setText(plugin->getName());
     this->bypassButton->setVisible(true);
@@ -77,17 +93,23 @@ void FxPanelItem::setPlugin(const QSharedPointer<audio::Plugin> &plugin)
     updateStyleSheet();
 }
 
-void FxPanelItem::unsetPlugin()
+QSharedPointer<audio::Plugin> FxPanelItem::detachPlugin()
 {
-    this->plugin->closeEditor();
+    QSharedPointer<audio::Plugin> detachedPlugin;
+    qSwap(this->plugin, detachedPlugin);
     this->label->setText("");
     this->bypassButton->setVisible(false);
-
-    mainController->removePlugin(this->localTrackView->getInputIndex(), plugin);
-
-    this->plugin = nullptr;
-
     updateStyleSheet();
+    return detachedPlugin;
+}
+
+void FxPanelItem::removePlugin()
+{
+    auto detachedPlugin = detachPlugin();
+    if (detachedPlugin) {
+        detachedPlugin->closeEditor();
+        mainController->removePlugin(localTrackView->getInputIndex(), detachedPlugin);
+    }
 }
 
 void FxPanelItem::mousePressEvent(QMouseEvent *event)
@@ -134,7 +156,7 @@ void FxPanelItem::showPluginsListMenu(const QPoint &p)
 #endif
     //categories << PluginDescriptor::Native_Plugin; // native plugins are not implemented yet
 
-    for (PluginDescriptor::Category category : categories) { // category = VST, NATIVE, AU
+    for (PluginDescriptor::Category category : qAsConst(categories)) { // category = VST, NATIVE, AU
 
         QMenu *categoryMenu = &menu;
         if (categories.size() > 1) {
@@ -145,15 +167,16 @@ void FxPanelItem::showPluginsListMenu(const QPoint &p)
 
         auto plugins = mainController->getPluginsDescriptors(category);
 
-        for (const QString &manufacturer : plugins.keys()) {
-            bool canCreateManufacturerMenu = !manufacturer.isEmpty() && plugins[manufacturer].size() > 1; // when the manufacturer has only one plugin this plugin is showed in the Root menu
+        for (auto manufacturerIt = plugins.begin(); manufacturerIt != plugins.end(); ++manufacturerIt) {
+            const auto& manufacturerName = manufacturerIt.key();
+            const auto& manufacturerPlugins = manufacturerIt.value();
             QMenu *parentMenu = categoryMenu;
-            if (canCreateManufacturerMenu) {
-                parentMenu = new QMenu(manufacturer);
+            // when the manufacturer has only one plugin this plugin is showed in the Root menu
+            if (!manufacturerName.isEmpty() && manufacturerPlugins.size() > 1) {
+                parentMenu = new QMenu(manufacturerName);
                 categoryMenu->addMenu(parentMenu);
             }
-
-            for (const auto &pluginDescriptor  : plugins[manufacturer]) {
+            for (const auto &pluginDescriptor : manufacturerPlugins) {
                 QAction *action = parentMenu->addAction(pluginDescriptor.getName(), this, SLOT(loadSelectedPlugin()));
                 action->setData(pluginDescriptor.toString());
             }
@@ -168,12 +191,18 @@ void FxPanelItem::on_contextMenu(QPoint p)
 {
     if (!containPlugin()) { // show plugins list
         showPluginsListMenu(p);
-    }
-    else { // show actions list if contain a plugin
-        QMenu menu(this);
-        menu.connect(&menu, SIGNAL(triggered(QAction *)), this, SLOT(on_actionMenuTriggered(QAction *)));
-        menu.addAction(tr("bypass"));
-        menu.addAction(tr("remove"));
+    } else { // show actions list if contain a plugin
+        QMenu menu(plugin->getName(), this);
+        menu.connect(&menu, SIGNAL(triggered(QAction*)), this, SLOT(on_actionMenuTriggered(QAction*)));
+        qint32 pluginIndex = localTrackView->getPluginSlotIndex(plugin);
+        auto moveUpItem = menu.addAction(tr("move up"));
+        moveUpItem->setData(FX_MENU_ACTION_MOVE_UP);
+        moveUpItem->setEnabled(pluginIndex > 0);
+        auto moveDownItem = menu.addAction(tr("move down"));
+        moveDownItem->setData(FX_MENU_ACTION_MOVE_DOWN);
+        moveDownItem->setEnabled(pluginIndex < 4 - 1);
+        menu.addAction(tr("bypass"))->setData(FX_MENU_ACTION_BYPASS);
+        menu.addAction(tr("remove"))->setData(FX_MENU_ACTION_REMOVE);
         menu.move(mapToGlobal(p));
         menu.exec();
     }
@@ -191,7 +220,7 @@ void FxPanelItem::loadSelectedPlugin()
 
     // add a new plugin
     auto descriptor = audio::PluginDescriptor::fromString(action->data().toString());
-    qint32 pluginSlotIndex = localTrackView->getPluginFreeSlotIndex();
+    qint32 pluginSlotIndex = localTrackView->getPluginSlotIndex(nullptr); // search empty
     if (pluginSlotIndex >= 0) { // valid plugin slot (-1 will be returned when no free plugin slots are available)
         quint32 trackIndex = localTrackView->getInputIndex();
         auto plugin = mainController->addPlugin(trackIndex, pluginSlotIndex, descriptor);
@@ -213,13 +242,36 @@ void FxPanelItem::loadSelectedPlugin()
     QApplication::restoreOverrideCursor();
 }
 
-void FxPanelItem::on_actionMenuTriggered(QAction *a)
+void FxPanelItem::on_actionMenuTriggered(QAction *action)
 {
     if (containPlugin()) {
-        if (a->text() == tr("bypass"))
-            bypassButton->click(); // simulate a click in the bypass button
-        else if (a->text() == tr("remove"))
-            unsetPlugin(); // set this->plugin to nullptr AND remove from mainController
+        int actionIndex = action->data().toInt();
+        switch (actionIndex) {
+        case FX_MENU_ACTION_MOVE_UP: {
+            qint32 pluginIndex = localTrackView->getPluginSlotIndex(plugin);
+            if (pluginIndex >= 1) {
+                localTrackView->swapPlugins(pluginIndex, pluginIndex - 1);
+                quint32 trackIndex = localTrackView->getInputIndex();
+                mainController->swapPlugins(trackIndex, pluginIndex, pluginIndex - 1);
+            }
+            break;
+        }
+        case FX_MENU_ACTION_MOVE_DOWN: {
+            qint32 pluginIndex = localTrackView->getPluginSlotIndex(plugin);
+            if (pluginIndex >= 0 && pluginIndex < 4 - 1) {
+                localTrackView->swapPlugins(pluginIndex, pluginIndex + 1);
+                quint32 trackIndex = localTrackView->getInputIndex();
+                mainController->swapPlugins(trackIndex, pluginIndex, pluginIndex + 1);
+            }
+            break;
+        }
+        case FX_MENU_ACTION_BYPASS:
+            bypassButton->click();
+            break;
+        case FX_MENU_ACTION_REMOVE:
+            removePlugin(); // set this->plugin to nullptr AND remove from mainController
+            break;
+        }
     }
 }
 

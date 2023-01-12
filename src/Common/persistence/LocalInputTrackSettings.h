@@ -13,6 +13,8 @@ static const qint8 MAX_MIDI_TRANSPOSE = 24;
 class Plugin final
 {
 public:
+    static const quint8 MAX_PROCESSORS_PER_TRACK = 4;
+
     class Builder final {
     public:
         explicit Builder(const audio::PluginDescriptor &descriptor);
@@ -128,7 +130,7 @@ public:
         }
         friend class SubChannel;
     private:
-        QList<persistence::Plugin> plugins;
+        QList<Plugin> plugins;
         int firstInput;
         int channelsCount;
         int midiDevice;
@@ -150,10 +152,7 @@ public:
     {
         return plugins;
     }
-    inline void setPlugins(const QList<Plugin> &newPlugins)
-    {
-        plugins = newPlugins;
-    }
+    void setPlugins(const QList<Plugin> &newPlugins);
     inline int getFirstInput() const
     {
         return firstInput;

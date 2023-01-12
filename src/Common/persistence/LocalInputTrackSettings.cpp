@@ -45,7 +45,7 @@ Plugin::Builder::Builder(const QJsonObject &in):
     path(in["path"].toString("")),
     name(in["name"].toString("")),
     manufacturer(in["manufacturer"].toString("")),
-    bypassed(in["path"].toBool(false)),
+    bypassed(in["bypassed"].toBool(false)),
     category(static_cast<audio::PluginDescriptor::Category>(in["category"].toInt(int(audio::PluginDescriptor::Category::VST_Plugin))))
 {
     QString dataString = in["data"].toString("");
@@ -56,6 +56,7 @@ Plugin::Builder::Builder(const QJsonObject &in):
 }
 
 SubChannel::SubChannel(const Builder& builder):
+    plugins(builder.plugins),
     firstInput(builder.firstInput),
     channelsCount(builder.channelsCount),
     midiDevice(builder.midiDevice),
@@ -97,6 +98,18 @@ void SubChannel::write(QJsonObject &out, bool skipMidiRouting) const
         pluginsArray.append(pluginObject);
     }
     out["plugins"] = pluginsArray;
+}
+
+void SubChannel::setPlugins(const QList<Plugin> &newPlugins)
+{
+    if (newPlugins.length() >= Plugin::MAX_PROCESSORS_PER_TRACK) {
+        plugins.clear();
+        for (int i = 0; i < Plugin::MAX_PROCESSORS_PER_TRACK; ++i) {
+            plugins.append(newPlugins.at(i));
+        }
+    } else {
+        plugins = newPlugins;
+    }
 }
 
 SubChannel::Builder::Builder():
@@ -148,6 +161,9 @@ SubChannel::Builder::Builder(const QJsonObject &in, bool skipMidiRouting):
             }
             if (pathIsValid) {
                 plugins.append(plugin);
+                if (plugins.length() >= Plugin::MAX_PROCESSORS_PER_TRACK) {
+                    break; // ignore all plugins above allowed count
+                }
             }
         }
     }

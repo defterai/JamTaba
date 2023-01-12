@@ -36,6 +36,7 @@ public:
     virtual bool disconnect(AudioNode &otherNode);
 
     virtual void addProcessor(const QSharedPointer<AudioNodeProcessor> &newProcessor, quint32 slotIndex);
+    void swapProcessors(quint32 firstSlotIndex, quint32 secondSlotIndex);
     void removeProcessor(const QSharedPointer<AudioNodeProcessor> &processor);
     void suspendProcessors();
     void resumeProcessors();

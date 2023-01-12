@@ -257,7 +257,7 @@ void MainWindowStandalone::restoreLocalSubchannelPluginsList(
 
         audio::PluginDescriptor descriptor(plugin.getName(), category, plugin.getManufacturer(), plugin.getPath());
         quint32 inputTrackIndex = subChannelView->getInputIndex();
-        qint32 pluginSlotIndex = subChannelView->getPluginFreeSlotIndex();
+        qint32 pluginSlotIndex = subChannelView->getPluginSlotIndex(nullptr);
         if (pluginSlotIndex >= 0) {
             auto pluginInstance
                 = controller->addPlugin(inputTrackIndex, pluginSlotIndex, descriptor);

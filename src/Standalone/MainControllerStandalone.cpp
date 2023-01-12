@@ -120,6 +120,12 @@ QSharedPointer<audio::Plugin> MainControllerStandalone::addPlugin(quint32 inputT
     return plugin;
 }
 
+void MainControllerStandalone::swapPlugins(quint32 inputTrackIndex, quint32 firstSlotIndex, quint32 secondSlotIndex)
+{
+    QMutexLocker locker(&mutex);
+    getInputTrack(inputTrackIndex)->swapProcessors(firstSlotIndex, secondSlotIndex);
+}
+
 void MainControllerStandalone::removePlugin(int inputTrackIndex, const QSharedPointer<audio::Plugin> &plugin)
 {
     QMutexLocker locker(&mutex);
