@@ -200,7 +200,7 @@ void FxPanelItem::on_contextMenu(QPoint p)
         moveUpItem->setEnabled(pluginIndex > 0);
         auto moveDownItem = menu.addAction(tr("move down"));
         moveDownItem->setData(FX_MENU_ACTION_MOVE_DOWN);
-        moveDownItem->setEnabled(pluginIndex < 4 - 1);
+        moveDownItem->setEnabled(pluginIndex < localTrackView->getPluginSlotCount() - 1);
         menu.addAction(tr("bypass"))->setData(FX_MENU_ACTION_BYPASS);
         menu.addAction(tr("remove"))->setData(FX_MENU_ACTION_REMOVE);
         menu.move(mapToGlobal(p));
@@ -258,7 +258,7 @@ void FxPanelItem::on_actionMenuTriggered(QAction *action)
         }
         case FX_MENU_ACTION_MOVE_DOWN: {
             qint32 pluginIndex = localTrackView->getPluginSlotIndex(plugin);
-            if (pluginIndex >= 0 && pluginIndex < 4 - 1) {
+            if (pluginIndex >= 0 && pluginIndex < localTrackView->getPluginSlotCount() - 1) {
                 localTrackView->swapPlugins(pluginIndex, pluginIndex + 1);
                 quint32 trackIndex = localTrackView->getInputIndex();
                 mainController->swapPlugins(trackIndex, pluginIndex, pluginIndex + 1);

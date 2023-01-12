@@ -402,6 +402,11 @@ qint32 LocalTrackViewStandalone::getPluginSlotIndex(const QSharedPointer<Plugin>
     return fxPanel->getPluginSlotIndex(plugin);
 }
 
+qint32 LocalTrackViewStandalone::getPluginSlotCount() const
+{
+    return fxPanel->getItems().length();
+}
+
 QList<QSharedPointer<audio::Plugin>> LocalTrackViewStandalone::getInsertedPlugins() const
 {
     QList<QSharedPointer<audio::Plugin>> plugins;

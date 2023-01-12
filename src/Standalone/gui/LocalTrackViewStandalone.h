@@ -33,6 +33,7 @@ public:
     }
 
     qint32 getPluginSlotIndex(const QSharedPointer<Plugin> &plugin) const;
+    qint32 getPluginSlotCount() const;
 
     void reset() override;
 
