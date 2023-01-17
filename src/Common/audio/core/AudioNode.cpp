@@ -19,6 +19,8 @@ using audio::AudioNodeProcessor;
 const double AudioNode::ROOT_2_OVER_2 = 1.414213562373095 * 0.5;
 const double AudioNode::PI_OVER_2 = 3.141592653589793238463 * 0.5;
 
+QAtomicInt AudioNode::LAST_FREE_ID = 1;
+
 void AudioNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, std::vector<midi::MidiMessage> &midiBuffer)
 {
     Q_UNUSED(in);
@@ -82,6 +84,7 @@ AudioNode::AudioNode() :
     pan(0),
     leftGain(1.0),
     rightGain(1.0),
+    id(LAST_FREE_ID++),
     muted(false),
     soloed(false),
     activated(true),

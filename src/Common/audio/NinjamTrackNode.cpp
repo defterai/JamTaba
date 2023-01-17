@@ -156,8 +156,7 @@ quint32 NinjamTrackNode::IntervalDecoder::getDecodedSamples(audio::SamplesBuffer
 
 //-------------------------------------------------------------
 
-NinjamTrackNode::NinjamTrackNode(int ID) :
-    ID(ID),
+NinjamTrackNode::NinjamTrackNode() :
     lowCut(new NinjamTrackNode::LowCutFilter(44100)),
     nodeDestroying(false),
     currentDecoder(nullptr),

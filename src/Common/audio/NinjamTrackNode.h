@@ -27,7 +27,7 @@ public:
         Changing // used when waiting for the next interval do change the mode. Nothing is played in this 'transition state mode'
     };
 
-    explicit NinjamTrackNode(int ID);
+    NinjamTrackNode();
     virtual ~NinjamTrackNode();
     void addVorbisEncodedInterval(const QByteArray &fullIntervalBytes);
     void addVorbisEncodedChunk(const QByteArray &chunkBytes, bool isFirstPart, bool isLastPart);
@@ -39,7 +39,6 @@ public:
     LowCutState getLowCutState() const;
 
     bool startNewInterval();
-    int getID() const;
 
     int getSampleRate() const;
 
@@ -81,7 +80,6 @@ protected:
     void setChannelMode(ChannelMode newMode);
 
 private:
-    int ID;
     SamplesBufferResampler resampler;
 
     class LowCutFilter;
@@ -109,11 +107,5 @@ private:
     void consumePendingEvents(bool process);
 
 };
-
-
-inline int NinjamTrackNode::getID() const
-{
-    return ID;
-}
 
 #endif // NINJAMTRACKNODE_H

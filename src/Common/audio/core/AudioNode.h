@@ -29,6 +29,7 @@ public:
 
     void setSolo(bool soloed);
 
+    int getID() const;
     bool isMuted() const;
     bool isSoloed() const;
 
@@ -91,6 +92,7 @@ private:
     AudioNode(const AudioNode &other);
     AudioNode &operator=(const AudioNode &other);
 
+    int id;
     bool muted;
     bool soloed;
 
@@ -101,6 +103,7 @@ private:
 
     static const double ROOT_2_OVER_2;
     static const double PI_OVER_2;
+    static QAtomicInt LAST_FREE_ID;
 
     double resamplingCorrection;
 
@@ -143,6 +146,11 @@ inline float AudioNode::getBoost() const
 inline float AudioNode::getGain() const
 {
     return gain;
+}
+
+inline int AudioNode::getID() const
+{
+    return id;
 }
 
 inline bool AudioNode::isMuted() const

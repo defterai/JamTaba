@@ -330,6 +330,14 @@ void MainControllerStandalone::setupNinjamControllerSignals()
             SLOT(on_ninjamStartProcessing(int)));
 }
 
+void MainControllerStandalone::clearNinjamControllerSignals()
+{
+    MainController::clearNinjamControllerSignals();
+
+    disconnect(ninjamController.data(), SIGNAL(startProcessing(int)), this,
+            SLOT(on_ninjamStartProcessing(int)));
+}
+
 void MainControllerStandalone::on_ninjamStartProcessing(int intervalPosition)
 {
     for (auto host : hosts)

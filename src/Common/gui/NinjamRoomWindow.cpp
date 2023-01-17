@@ -363,25 +363,36 @@ void NinjamRoomWindow::setMetronomePanSliderPosition(int value)
     if (!metronomePanel)
         return;
 
+    int metronomeTrackId = mainController->getNinjamController()->getMetronomeTrackId();
+    if (!metronomeTrackId)
+        return;
+
     float sliderValue = value/(float)metronomePanel->getPanSliderMaximumValue();
-    mainController->setTrackPan(controller::NinjamController::METRONOME_TRACK_ID, sliderValue);
+    mainController->setTrackPan(metronomeTrackId, sliderValue);
 }
 
 void NinjamRoomWindow::setMetronomeFaderPosition(int value)
 {
-    mainController->setTrackGain(controller::NinjamController::METRONOME_TRACK_ID, value/100.0);
+    int metronomeTrackId = mainController->getNinjamController()->getMetronomeTrackId();
+    if (!metronomeTrackId)
+        return;
+    mainController->setTrackGain(metronomeTrackId, value/100.0);
 }
 
 void NinjamRoomWindow::toggleMetronomeMuteStatus()
 {
-    mainController->setTrackMute(controller::NinjamController::METRONOME_TRACK_ID, !mainController->trackIsMuted(
-                                     controller::NinjamController::METRONOME_TRACK_ID));
+    int metronomeTrackId = mainController->getNinjamController()->getMetronomeTrackId();
+    if (!metronomeTrackId)
+        return;
+    mainController->setTrackMute(metronomeTrackId, !mainController->trackIsMuted(metronomeTrackId));
 }
 
 void NinjamRoomWindow::toggleMetronomeSoloStatus()
 {
-    mainController->setTrackSolo(controller::NinjamController::METRONOME_TRACK_ID, !mainController->trackIsSoloed(
-                                     controller::NinjamController::METRONOME_TRACK_ID));
+    int metronomeTrackId = mainController->getNinjamController()->getMetronomeTrackId();
+    if (!metronomeTrackId)
+        return;
+    mainController->setTrackSolo(metronomeTrackId, !mainController->trackIsSoloed(metronomeTrackId));
 }
 
 void NinjamRoomWindow::resetBpiComboBox()
@@ -408,7 +419,11 @@ void NinjamRoomWindow::updatePeaks()
     if (!metronomePanel)
         return;
 
-    auto metronomePeak = mainController->getTrackPeak(controller::NinjamController::METRONOME_TRACK_ID);
+    int metronomeTrackId = mainController->getNinjamController()->getMetronomeTrackId();
+    if (!metronomeTrackId)
+        return;
+
+    auto metronomePeak = mainController->getTrackPeak(metronomeTrackId);
 
     metronomePanel->setMetronomePeaks(metronomePeak.getLeftPeak(),
                                    metronomePeak.getRightPeak(),

@@ -46,6 +46,9 @@ public:
     void stop(bool emitDisconnectedSignal);
     bool isRunning() const;
 
+    int getMetronomeTrackId() const;
+    int getMidiSyncTrackId() const;
+
     void setMetronomeBeatsPerAccent(int beatsPerAccent, int currentBpi);
     void setMetronomeAccentBeats(QList<int> accentBeats);
     QList<int> getMetronomeAccentBeats();
@@ -62,9 +65,6 @@ public:
     void setSyncEnabled(bool enabled);
 
     void sendChatMessage(const QString &msg);
-
-    static const long METRONOME_TRACK_ID = 123456789;     // just a number :)
-    static const long MIDI_SYNC_TRACK_ID = 1123581113;    // also just a number ;)
 
     void recreateEncoders();
 
@@ -150,10 +150,6 @@ private:
 
     void processScheduledChanges();
     bool hasScheduledChanges() const;
-
-    static std::atomic<int> trackIds;
-
-    static int generateNewTrackID();
 
     QSharedPointer<MetronomeTrackNode> createMetronomeTrackNode(int sampleRate);
 

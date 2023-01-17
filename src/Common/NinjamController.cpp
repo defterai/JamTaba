@@ -227,8 +227,6 @@ private:
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-std::atomic<int> NinjamController::trackIds(100);
-
 NinjamController::NinjamController(controller::MainController *mainController) :
     intervalPosition(0),
     samplesInInterval(0),
@@ -430,7 +428,7 @@ void NinjamController::recreateMetronome(int newSampleRate)
     bool oldSoloStatus = metronomeTrackNode->isSoloed();
     QList<int> oldAccentBeats = metronomeTrackNode->getAccentBeats();
 
-    mainController->removeTrack(METRONOME_TRACK_ID);
+    mainController->removeTrack(metronomeTrackNode->getID());
 
     // recreate metronome using the new sample rate
     this->metronomeTrackNode = createMetronomeTrackNode(newSampleRate);
@@ -440,7 +438,7 @@ void NinjamController::recreateMetronome(int newSampleRate)
     this->metronomeTrackNode->setMute(oldMutedStatus);
     this->metronomeTrackNode->setSolo(oldSoloStatus);
     this->metronomeTrackNode->setAccentBeats(oldAccentBeats);
-    mainController->addTrack(METRONOME_TRACK_ID, this->metronomeTrackNode);
+    mainController->addTrack(this->metronomeTrackNode);
 }
 
 void NinjamController::stop(bool emitDisconnectedSignal)
@@ -476,19 +474,14 @@ void NinjamController::stop(bool emitDisconnectedSignal)
 
         // stop midi sync track
         this->midiSyncTrackNode->stop();
-        mainController->removeTrack(MIDI_SYNC_TRACK_ID);
+        mainController->removeTrack(midiSyncTrackNode->getID());
 
         // store metronome settings
-        auto metronomeTrack = mainController->getTrackNode(METRONOME_TRACK_ID);
-        if (metronomeTrack)
-        {
-            float metronomeGain = Utils::poweredGainToLinear(metronomeTrack->getGain());
-            float metronomePan = metronomeTrack->getPan();
-            bool metronomeIsMuted = metronomeTrack->isMuted();
-
-            mainController->storeMetronomeSettings(metronomeGain, metronomePan, metronomeIsMuted);
-            mainController->removeTrack(METRONOME_TRACK_ID);// remove metronome
-        }
+        float metronomeGain = Utils::poweredGainToLinear(metronomeTrackNode->getGain());
+        float metronomePan = metronomeTrackNode->getPan();
+        bool metronomeIsMuted = metronomeTrackNode->isMuted();
+        mainController->storeMetronomeSettings(metronomeGain, metronomePan, metronomeIsMuted);
+        mainController->removeTrack(metronomeTrackNode->getID());// remove metronome
 
         QVector<QSharedPointer<NinjamTrackNode>> trackNodesList;
         {
@@ -571,12 +564,12 @@ void NinjamController::start(const ServerInfo &server)
 
         const auto& metronomeSettings = mainController->getSettings().metronomeSettings;
 
-        mainController->addTrack(METRONOME_TRACK_ID, this->metronomeTrackNode);
-        mainController->setTrackMute(METRONOME_TRACK_ID, metronomeSettings.isMuted());
-        mainController->setTrackGain(METRONOME_TRACK_ID, metronomeSettings.getGain());
-        mainController->setTrackPan(METRONOME_TRACK_ID, metronomeSettings.getPan());
+        mainController->addTrack(this->metronomeTrackNode);
+        mainController->setTrackMute(this->metronomeTrackNode->getID(), metronomeSettings.isMuted());
+        mainController->setTrackGain(this->metronomeTrackNode->getID(), metronomeSettings.getGain());
+        mainController->setTrackPan(this->metronomeTrackNode->getID(), metronomeSettings.getPan());
 
-        mainController->addTrack(MIDI_SYNC_TRACK_ID, this->midiSyncTrackNode);
+        mainController->addTrack(this->midiSyncTrackNode);
 
         this->intervalPosition = lastBeat = 0;
 
@@ -658,11 +651,6 @@ void NinjamController::sendChatMessage(const QString &msg)
     }
 }
 
-int NinjamController::generateNewTrackID()
-{
-    return trackIds++;
-}
-
 QString NinjamController::getUniqueKeyForChannel(const UserChannel &channel,
                                                  const QString &userFullName)
 {
@@ -682,7 +670,7 @@ void NinjamController::addTrack(const User &user, const UserChannel &channel)
         return;
 
     QString uniqueKey = getUniqueKeyForChannel(channel, user.getFullName());
-    auto trackNode = QSharedPointer<NinjamTrackNode>::create(generateNewTrackID());
+    auto trackNode = QSharedPointer<NinjamTrackNode>::create();
 
     // checkThread("addTrack();");
     {
@@ -690,7 +678,7 @@ void NinjamController::addTrack(const User &user, const UserChannel &channel)
         trackNodes.insert(uniqueKey, trackNode);
     } // release the mutex before emit the signal
 
-    bool trackAdded = mainController->addTrack(trackNode->getID(), trackNode);
+    bool trackAdded = mainController->addTrack(trackNode);
     if (trackAdded)
     {
         emit channelAdded(user, channel, trackNode->getID());
@@ -721,6 +709,16 @@ void NinjamController::removeTrack(const User &user, const UserChannel &channel)
         mainController->removeTrack(trackNodeId);
         emit channelRemoved(user, channel, trackNodeId);
     }
+}
+
+int NinjamController::getMetronomeTrackId() const
+{
+    return metronomeTrackNode->getID();
+}
+
+int NinjamController::getMidiSyncTrackId() const
+{
+    return midiSyncTrackNode->getID();
 }
 
 void NinjamController::voteBpi(int bpi)

@@ -51,7 +51,6 @@ MainController::MainController(const Settings &settings) :
     started(false),
     masterGain(1),
     usersDataCache(Configurator::getInstance()->getCacheDir()),
-    lastInputTrackID(0),
     lastFrameTimeStamp(0),
     emojiManager(":/emoji/emoji.json", ":/emoji/icons")
 {
@@ -227,6 +226,19 @@ void MainController::setupNinjamControllerSignals()
     connect(controller, &NinjamController::startProcessing, this, &MainController::requestCameraFrame);
 }
 
+void MainController::clearNinjamControllerSignals()
+{
+    auto controller = ninjamController.data();
+
+    Q_ASSERT(controller);
+
+    disconnect(controller, &NinjamController::encodedAudioAvailableToSend, this, &MainController::enqueueAudioDataToUpload);
+    disconnect(controller, &NinjamController::startingNewInterval, this, &MainController::handleNewNinjamInterval);
+    disconnect(controller, &NinjamController::currentBpiChanged, this, &MainController::updateBpi);
+    disconnect(controller, &NinjamController::currentBpmChanged, this, &MainController::updateBpm);
+    disconnect(controller, &NinjamController::startProcessing, this, &MainController::requestCameraFrame);
+}
+
 void MainController::connectInNinjamServer(const ServerInfo &server)
 {
     qCDebug(jtCore) << "connected in ninjam server";
@@ -234,6 +246,9 @@ void MainController::connectInNinjamServer(const ServerInfo &server)
     stopNinjamController();
 
     auto newNinjamController = createNinjamController();
+    if (ninjamController) {
+        clearNinjamControllerSignals();
+    }
     ninjamController.reset(newNinjamController);
 
     setupNinjamControllerSignals();
@@ -513,9 +528,8 @@ void MainController::removeInputTrackNode(int inputTrackIndex)
 
 int MainController::addInputTrackNode(QSharedPointer<audio::LocalInputNode> inputTrackNode)
 {
-    int inputTrackID = lastInputTrackID++; // input tracks are not created concurrently, no worries about thread safe in this track ID generation, I hope :)
-    inputTracks.insert(inputTrackID, inputTrackNode);
-    addTrack(inputTrackID, inputTrackNode);
+    inputTracks.insert(inputTrackNode->getID(), inputTrackNode);
+    addTrack(inputTrackNode);
 
     int trackGroupIndex = inputTrackNode->getChanneGroupIndex();
     auto it = trackGroups.find(trackGroupIndex);
@@ -525,7 +539,7 @@ int MainController::addInputTrackNode(QSharedPointer<audio::LocalInputNode> inpu
         trackGroups.insert(trackGroupIndex, QSharedPointer<audio::LocalInputGroup>::create(trackGroupIndex, inputTrackNode));
     }
 
-    return inputTrackID;
+    return inputTrackNode->getID();
 }
 
 QSharedPointer<audio::LocalInputNode> MainController::getInputTrack(int localInputIndex)
@@ -548,11 +562,11 @@ QSharedPointer<audio::AudioNode> MainController::getTrackNode(long ID) const
     return nullptr;
 }
 
-bool MainController::addTrack(long trackID, QSharedPointer<audio::AudioNode> trackNode)
+bool MainController::addTrack(QSharedPointer<audio::AudioNode> trackNode)
 {
     QMutexLocker locker(&mutex);
 
-    tracksNodes.insert(trackID, trackNode);
+    tracksNodes.insert(trackNode->getID(), trackNode);
     audioMixer.addNode(trackNode);
 
     return true;

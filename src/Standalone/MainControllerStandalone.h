@@ -150,6 +150,7 @@ namespace controller
         void setCSS(const QString &css) override;
 
         void setupNinjamControllerSignals() override;
+        void clearNinjamControllerSignals() override;
 
         std::vector<midi::MidiMessage> pullMidiMessagesFromDevices() override;
 

@@ -117,7 +117,7 @@ public:
         return settings.getTheme();
     }
 
-    bool addTrack(long trackID, QSharedPointer<audio::AudioNode> trackNode);
+    bool addTrack(QSharedPointer<audio::AudioNode> trackNode);
     void removeTrack(long trackID);
 
     void playRoomStream(const RoomInfo &roomInfo);
@@ -334,7 +334,7 @@ public slots:
 
     void processCapturedFrame(int frameID, const QImage &frame);
 
-    virtual void connectInNinjamServer(const ServerInfo &server);
+    virtual void connectInNinjamServer(const ninjam::client::ServerInfo &server);
 
     void storeChatFontSizeOffset(qint8 fontSizeOffset);
 
@@ -367,6 +367,7 @@ protected:
     mutable QMutex mutex;
 
     virtual void setupNinjamControllerSignals();
+    virtual void clearNinjamControllerSignals();
 
     virtual void setCSS(const QString &css) = 0;
 
@@ -407,8 +408,6 @@ private:
 
     UsersDataCache usersDataCache;
 
-    int lastInputTrackID;     // used to generate a unique key/ID for each input track
-
     const static quint8 CAMERA_FPS;
 
     bool canGrabNewFrameFromCamera() const;
@@ -428,7 +427,7 @@ private:
 protected slots:
 
     // ninjam
-    virtual void disconnectFromNinjamServer(const ServerInfo &server);
+    virtual void disconnectFromNinjamServer(const ninjam::client::ServerInfo &server);
     virtual void quitFromNinjamServer(const QString &error);
 
     void enqueueAudioDataToUpload(const QByteArray &encodedData, quint8 channelIndex, bool isFirstPart);
