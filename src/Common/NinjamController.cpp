@@ -232,7 +232,7 @@ NinjamController::NinjamController(controller::MainController *mainController) :
     samplesInInterval(0),
     mainController(mainController),
     metronomeTrackNode(createMetronomeTrackNode(mainController->getSampleRate())),
-    midiSyncTrackNode(new audio::MidiSyncTrackNode(mainController)),
+    midiSyncTrackNode(new audio::MidiSyncTrackNode()),
     lastBeat(0),
     currentBpi(0),
     currentBpm(0),
@@ -243,6 +243,10 @@ NinjamController::NinjamController(controller::MainController *mainController) :
     waitingIntervals(0) // waiting for start transmit
 {
     running = false;
+
+    connect(midiSyncTrackNode.data(), &MidiSyncTrackNode::midiClockStarted, mainController, &MainController::startMidiClock);
+    connect(midiSyncTrackNode.data(), &MidiSyncTrackNode::midiClockStopped, mainController, &MainController::stopMidiClock);
+    connect(midiSyncTrackNode.data(), &MidiSyncTrackNode::midiClockPulsed, mainController, &MainController::sendMidiClockPulse);
 }
 
 User NinjamController::getUserByName(const QString &userName) const

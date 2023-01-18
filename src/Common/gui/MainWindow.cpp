@@ -978,9 +978,9 @@ void MainWindow::openLooperWindow(uint trackID)
             looperWindow->setTintColor(getTintColor());
         }
 
-        looperWindow->setLooper(inputTrack->getLooper());
+        looperWindow->setLooper(inputTrack->getLooper().data());
 
-        auto channel = localGroupChannels.at(inputTrack->getChanneGroupIndex());
+        auto channel = localGroupChannels.at(inputTrack->getChannelGroupIndex());
         Q_ASSERT(channel);
 
         int subchannelInternalIndex = channel->getSubchannelInternalIndex(trackID);

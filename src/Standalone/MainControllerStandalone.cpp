@@ -64,7 +64,7 @@ void MainControllerStandalone::setInputTrackToMono(int localChannelIndex,
         if (isPlayingInNinjamRoom())
         {
             if (ninjamController) { // just in case
-                auto trackGroupIndex = inputTrack->getChanneGroupIndex();
+                auto trackGroupIndex = inputTrack->getChannelGroupIndex();
                 bool voiceChannelActivated = isVoiceChatActivated(trackGroupIndex);
                 ninjamController->scheduleEncoderChangeForChannel(trackGroupIndex, voiceChannelActivated);
             }
@@ -198,7 +198,7 @@ void MainControllerStandalone::setInputTrackToMIDI(int localChannelIndex, int mi
         if (isPlayingInNinjamRoom())
         {
             if (ninjamController) {
-                auto trackGroupIndex = inputTrack->getChanneGroupIndex();
+                auto trackGroupIndex = inputTrack->getChannelGroupIndex();
                 bool voiceChannelActivated = isVoiceChatActivated(trackGroupIndex);
                 ninjamController->scheduleEncoderChangeForChannel(trackGroupIndex, voiceChannelActivated);
             }
@@ -221,7 +221,7 @@ void MainControllerStandalone::setInputTrackToNoInput(int localChannelIndex)
                 ninjamService->sendIntervalPart(
                     audioIntervalsToUpload[localChannelIndex].getGUID(), QByteArray(), true);
                 if (ninjamController) {
-                    auto trackGroupIndex = inputTrack->getChanneGroupIndex();
+                    auto trackGroupIndex = inputTrack->getChannelGroupIndex();
                     bool voiceChannelActivated = isVoiceChatActivated(trackGroupIndex);
                     ninjamController->scheduleEncoderChangeForChannel(trackGroupIndex, voiceChannelActivated);
                 }
@@ -255,7 +255,7 @@ void MainControllerStandalone::setInputTrackToStereo(int localChannelIndex, int 
         if (isPlayingInNinjamRoom())
         {
             if (ninjamController) {
-                auto trackGroupIndex = inputTrack->getChanneGroupIndex();
+                auto trackGroupIndex = inputTrack->getChannelGroupIndex();
                 bool voiceChannelActivated = isVoiceChatActivated(trackGroupIndex);
                 ninjamController->scheduleEncoderChangeForChannel(trackGroupIndex, voiceChannelActivated);
             }

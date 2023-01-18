@@ -56,7 +56,7 @@ void AudioNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out, in
                 midiBuffer.clear(); // only the fresh messages will be passed by the next plugin in the chain
 
 
-            auto pulledMessages = pullMidiMessagesGeneratedByPlugins();
+            auto pulledMessages = processor->pullGeneratedMidiMessages();
             midiBuffer.insert(midiBuffer.end(), pulledMessages.begin(), pulledMessages.end());
         }
     }
@@ -96,11 +96,6 @@ AudioNode::AudioNode() :
     for (int i=0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
         processors[i] = nullptr;
     }
-}
-
-std::vector<midi::MidiMessage> AudioNode::pullMidiMessagesGeneratedByPlugins() const
-{
-    return std::vector<midi::MidiMessage>(); // returning empty vector by default, is overrided in LocalInputNode
 }
 
 int AudioNode::getInputResamplingLength(int sourceSampleRate, int targetSampleRate, int outFrameLenght)

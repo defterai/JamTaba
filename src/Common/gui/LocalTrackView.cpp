@@ -1,6 +1,7 @@
 #include "LocalTrackView.h"
 #include "MainController.h"
 #include "audio/core/LocalInputNode.h"
+#include "audio/core/LocalInputGroup.h"
 #include "GuiUtils.h"
 #include "widgets/BoostSpinBox.h"
 #include "IconFactory.h"
@@ -118,7 +119,13 @@ LocalTrackView::LocalTrackView(controller::MainController *mainController, int c
 {
     Q_ASSERT(mainController);
 
-    this->inputNode = QSharedPointer<audio::LocalInputNode>::create(mainController, channelIndex);
+    const auto& looperSettings = mainController->getSettings().looperSettings;
+    auto looper = QSharedPointer<audio::Looper>::create(looperSettings.getPreferredMode(),
+                                                        looperSettings.getPreferredLayersCount());
+    auto inputGroup = mainController->createInputTrackGroup(channelIndex);
+    this->inputNode = QSharedPointer<audio::LocalInputNode>::create(inputGroup, looper);
+    inputGroup->addInputNode(inputNode);
+
     // insert a input node in controller
     trackID = mainController->addInputTrackNode(this->inputNode);
     bindThisViewWithTrackNodeSignals();// now is secure bind this LocalTrackView with the respective TrackNode model
@@ -130,16 +137,15 @@ LocalTrackView::LocalTrackView(controller::MainController *mainController, int c
     secondaryChildsLayout->addWidget(buttonLooper, 0, Qt::AlignCenter);
     secondaryChildsLayout->addWidget(buttonStereoInversion, 0, Qt::AlignCenter);
 
-    auto looper = this->inputNode->getLooper();
-    connect(looper, &audio::Looper::stateChanged, this, &LocalTrackView::updateLooperButtonIcon);
-    connect(looper, &audio::Looper::currentLayerChanged, this, &LocalTrackView::updateLooperButtonIcon);
+    connect(looper.data(), &audio::Looper::stateChanged, this, &LocalTrackView::updateLooperButtonIcon);
+    connect(looper.data(), &audio::Looper::currentLayerChanged, this, &LocalTrackView::updateLooperButtonIcon);
 }
 
 void LocalTrackView::updateLooperButtonIcon()
 {
     // get a new icon based in looper state
     auto looper = this->inputNode->getLooper();
-    QIcon newIcon = looperIconFactory.getIcon(looper, buttonLooper->fontMetrics());
+    QIcon newIcon = looperIconFactory.getIcon(looper.data(), buttonLooper->fontMetrics());
     buttonLooper->setIcon(newIcon);
 }
 

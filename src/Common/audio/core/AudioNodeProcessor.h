@@ -31,6 +31,7 @@ public:
     virtual bool isVirtualInstrument() const;
 
     virtual bool canGenerateMidiMessages() const;
+    virtual std::vector<midi::MidiMessage> pullGeneratedMidiMessages();
 
 protected:
     bool bypassed;
@@ -51,6 +52,11 @@ inline bool AudioNodeProcessor::isVirtualInstrument() const
 inline bool AudioNodeProcessor::canGenerateMidiMessages() const
 {
     return false;
+}
+
+inline std::vector<midi::MidiMessage> AudioNodeProcessor::pullGeneratedMidiMessages()
+{
+    return std::vector<midi::MidiMessage>();
 }
 
 inline AudioNodeProcessor::~AudioNodeProcessor()

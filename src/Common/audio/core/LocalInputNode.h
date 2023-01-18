@@ -8,18 +8,16 @@ namespace midi {
     class MidiMessage;
 }
 
-namespace controller {
-class MainController;
-}
-
 namespace audio {
+
+class LocalInputGroup;
 
 class LocalInputNode : public AudioNode
 {
     Q_OBJECT
 
 public:
-    LocalInputNode(controller::MainController *controller, int parentChannelIndex, bool isMono = true);
+    LocalInputNode(const QSharedPointer<LocalInputGroup>& inputGroup, const QSharedPointer<Looper>& looper);
     ~LocalInputNode();
     void processReplacing(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, std::vector<midi::MidiMessage> &midiBuffer) override;
     virtual int getSampleRate() const;
@@ -52,11 +50,10 @@ public:
 
     bool isReceivingAllMidiChannels() const;
 
-    std::vector<midi::MidiMessage> pullMidiMessagesGeneratedByPlugins() const override;
-
     ChannelRange getAudioInputRange() const;
 
-    int getChanneGroupIndex() const;
+    const QSharedPointer<LocalInputGroup>& getChannelGroup() const;
+    int getChannelGroupIndex() const;
 
     const audio::SamplesBuffer &getLastBuffer() const;
     SamplesBuffer getLastBufferMixedToMono() const;
@@ -101,7 +98,7 @@ public:
     void startNewLoopCycle(uint intervalLenght);
     void stopLooper();
 
-    audio::Looper *getLooper() const;
+    const QSharedPointer<Looper>& getLooper() const;
 
 signals:
     void midiNoteLearned(quint8 midiNote);
@@ -141,15 +138,12 @@ private:
     };
 
     MidiInput midiInput;
-
-    int channelGroupIndex; // the group index (a group contain N LocalInputNode instances)
+    QSharedPointer<LocalInputGroup> inputGroup;
 
     bool stereoInverted;
 
     bool receivingRoutedMidiInput; // true when this is the first subchannel and is receiving midi input from second subchannel (rounted midi input)? issue #102
     bool routingMidiInput; // true when this is the second channel and is sending midi messages to the first channel
-
-    controller::MainController *mainController;
 
     enum InputMode {
         AUDIO, MIDI, DISABLED
@@ -161,13 +155,10 @@ private:
 
     void processIncommingMidi(std::vector<midi::MidiMessage> &inBuffer, std::vector<midi::MidiMessage> &outBuffer);
 
-    audio::Looper* looper;
-
-    static audio::Looper *createLooper(controller::MainController *controller);
-
+    QSharedPointer<Looper> looper;
 };
 
-inline audio::Looper *LocalInputNode::getLooper() const
+inline const QSharedPointer<Looper>& LocalInputNode::getLooper() const
 {
     return looper;
 }
@@ -222,9 +213,9 @@ inline ChannelRange LocalInputNode::getAudioInputRange() const
     return audioInputRange;
 }
 
-inline int LocalInputNode::getChanneGroupIndex() const
+inline const QSharedPointer<LocalInputGroup>& LocalInputNode::getChannelGroup() const
 {
-    return channelGroupIndex;
+    return inputGroup;
 }
 
 inline const audio::SamplesBuffer &LocalInputNode::getLastBuffer() const

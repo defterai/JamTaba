@@ -5,12 +5,11 @@ using audio::LocalInputGroup;
 using audio::LocalInputNode;
 using audio::SamplesBuffer;
 
-LocalInputGroup::LocalInputGroup(int groupIndex, QSharedPointer<LocalInputNode> firstInput) :
+LocalInputGroup::LocalInputGroup(int groupIndex) :
     groupIndex(groupIndex),
     transmiting(true),
     voiceChatActivated(false)
 {
-    addInputNode(firstInput);
 }
 
 LocalInputGroup::~LocalInputGroup()

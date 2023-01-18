@@ -288,7 +288,7 @@ void LocalTrackViewStandalone::setMidiRouting(bool routingMidiToFirstSubchannel)
 
 bool LocalTrackViewStandalone::isFirstSubchannel() const
 {
-    auto firstSubchannel = mainController->getInputTrackInGroup(inputNode->getChanneGroupIndex(), 0);
+    auto firstSubchannel = mainController->getInputTrackInGroup(inputNode->getChannelGroupIndex(), 0);
 
     return firstSubchannel == this->inputNode;
 }

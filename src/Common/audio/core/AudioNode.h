@@ -23,8 +23,6 @@ public:
 
     virtual void processReplacing(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, std::vector<midi::MidiMessage> &midiBuffer);
 
-    virtual std::vector<midi::MidiMessage> pullMidiMessagesGeneratedByPlugins() const;
-
     virtual void setMute(bool muted);
 
     void setSolo(bool soloed);

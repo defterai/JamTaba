@@ -72,6 +72,11 @@ bool VstPlugin::canGenerateMidiMessages() const
     return returnValue >= 0;
 }
 
+std::vector<midi::MidiMessage> VstPlugin::pullGeneratedMidiMessages()
+{
+    return host->pullReceivedMidiMessages();
+}
+
 bool VstPlugin::isVirtualInstrument() const
 {
     if (!effect) {

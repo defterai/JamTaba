@@ -183,6 +183,8 @@ public:
 
     login::Location getGeoLocation(const QString &ip);
 
+    QSharedPointer<audio::LocalInputGroup> createInputTrackGroup(int trackGroupIndex);
+
     QSharedPointer<LocalInputNode> getInputTrack(int localInputIndex);
     virtual int addInputTrackNode(QSharedPointer<LocalInputNode> inputTrackNode);
     void removeInputTrackNode(int inputTrackIndex);
@@ -282,18 +284,10 @@ public:
     void storeLooperPreferredMode(persistence::LooperMode looperMode);
     void storeLooperAudioEncodingFlag(bool encodeAudioWhenSaving);
     void storeLooperFolder(const QString &newLooperFolder);
-    quint8 getLooperPreferedLayersCount() const;
-    persistence::LooperMode getLooperPreferedMode() const;
     bool getLooperAudioEncodingFlag() const;
     quint8 getLooperBitDepth() const;
 
     void setAllLoopersStatus(bool activated);
-
-    // sync methods
-    virtual void startMidiClock() const = 0;
-    virtual void stopMidiClock() const = 0;
-    virtual void continueMidiClock() const = 0;
-    virtual void sendMidiClockPulse() const = 0;
 
     // collapse settings
     void setLocalChannelsCollapsed(bool collapsed);
@@ -321,6 +315,12 @@ signals:
     void ipResolved(const QString &ip);
 
 public slots:
+    // sync methods
+    virtual void startMidiClock() const = 0;
+    virtual void stopMidiClock() const = 0;
+    virtual void continueMidiClock() const = 0;
+    virtual void sendMidiClockPulse() const = 0;
+
     virtual void setSampleRate(int newSampleRate);
     void setEncodingQuality(float newEncodingQuality);
     void storeLooperBitDepth(quint8 bitDepth);
@@ -646,16 +646,6 @@ inline void MainController::storeLooperAudioEncodingFlag(bool encodeAudioWhenSav
 inline void MainController::storeLooperFolder(const QString &newLooperFolder)
 {
     settings.looperSettings.setLoopsFolder(newLooperFolder);
-}
-
-inline quint8 MainController::getLooperPreferedLayersCount() const
-{
-    return settings.looperSettings.getPreferredLayersCount();
-}
-
-inline persistence::LooperMode MainController::getLooperPreferedMode() const
-{
-    return settings.looperSettings.getPreferredMode();
 }
 
 inline bool MainController::getLooperAudioEncodingFlag() const

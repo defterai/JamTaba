@@ -3,20 +3,14 @@
 
 #include "core/AudioNode.h"
 
-namespace controller{
-    class MainController;
-}
-
 namespace audio {
-
-using controller::MainController;
 
 class MidiSyncTrackNode : public audio::AudioNode
 {
+    Q_OBJECT
 
 public:
-    MidiSyncTrackNode(MainController *controller);
-
+    MidiSyncTrackNode();
     ~MidiSyncTrackNode();
     void processReplacing(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, std::vector<midi::MidiMessage> &midiBuffer) override;
     void setPulseTiming(long pulsesPerInterval, double samplesPerPulse);
@@ -26,6 +20,11 @@ public:
     void start();
     void stop();
 
+signals:
+    void midiClockStarted();
+    void midiClockStopped();
+    void midiClockPulsed();
+
 private:
     long pulsesPerInterval;
     double samplesPerPulse;
@@ -34,8 +33,6 @@ private:
     int lastPlayedPulse;
     bool running;
     bool hasSentStart;
-
-    MainController *mainController;
 };
 
 } // namespace

@@ -55,6 +55,8 @@ public:
 
     bool canGenerateMidiMessages() const override;
 
+    std::vector<midi::MidiMessage> pullGeneratedMidiMessages() override;
+
     inline quint32 getPluginID() const { return effect->resvd1; }
 
 protected:

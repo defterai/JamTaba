@@ -1,5 +1,4 @@
 #include "MidiSyncTrackNode.h"
-#include "MainController.h"
 #include "MetronomeUtils.h"
 #include "audio/core/AudioDriver.h"
 #include <algorithm>
@@ -9,15 +8,14 @@ using audio::SamplesBuffer;
 
 using namespace controller;
 
-MidiSyncTrackNode::MidiSyncTrackNode(MainController *controller) :
+MidiSyncTrackNode::MidiSyncTrackNode() :
     pulsesPerInterval(0),
     samplesPerPulse(0),
     intervalPosition(0),
     currentPulse(0),
     lastPlayedPulse(-1),
     running(false),
-    hasSentStart(false),
-    mainController(controller)
+    hasSentStart(false)
 {
     resetInterval();
 }
@@ -60,7 +58,7 @@ void MidiSyncTrackNode::stop()
 {
     running = false;
     hasSentStart = false;
-    mainController->stopMidiClock();
+    emit midiClockStopped();
 }
 
 void MidiSyncTrackNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out,
@@ -71,7 +69,7 @@ void MidiSyncTrackNode::processReplacing(const SamplesBuffer &in, SamplesBuffer 
 
     if (currentPulse == 0 && currentPulse != lastPlayedPulse) {
         if (running && !hasSentStart) {
-            mainController->startMidiClock();
+            emit midiClockStarted();
             hasSentStart = true;
         }
 //        qDebug() << "Pulses played in interval: " << lastPlayedPulse;
@@ -79,7 +77,7 @@ void MidiSyncTrackNode::processReplacing(const SamplesBuffer &in, SamplesBuffer 
     }
 
     while (currentPulse < pulsesPerInterval && currentPulse - lastPlayedPulse >= 1) {
-        mainController->sendMidiClockPulse();
+        emit midiClockPulsed();
         lastPlayedPulse++;
     }
     AudioNode::processReplacing(in, out, SampleRate, midiBuffer);

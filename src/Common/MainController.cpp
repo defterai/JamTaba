@@ -512,7 +512,7 @@ void MainController::removeInputTrackNode(int inputTrackIndex)
     if (inputTracks.contains(inputTrackIndex)) {
         // remove from group
         auto inputTrack = inputTracks[inputTrackIndex];
-        int trackGroupIndex = inputTrack->getChanneGroupIndex();
+        int trackGroupIndex = inputTrack->getChannelGroupIndex();
         auto it = trackGroups.find(trackGroupIndex);
         if (it != trackGroups.end()) {
             it.value()->removeInput(inputTrack);
@@ -526,19 +526,21 @@ void MainController::removeInputTrackNode(int inputTrackIndex)
     }
 }
 
+QSharedPointer<audio::LocalInputGroup> MainController::createInputTrackGroup(int trackGroupIndex)
+{
+    auto it = trackGroups.find(trackGroupIndex);
+    if (it != trackGroups.end()) {
+        return it.value();
+    }
+    auto group = QSharedPointer<audio::LocalInputGroup>::create(trackGroupIndex);
+    trackGroups.insert(trackGroupIndex, group);
+    return group;
+}
+
 int MainController::addInputTrackNode(QSharedPointer<audio::LocalInputNode> inputTrackNode)
 {
     inputTracks.insert(inputTrackNode->getID(), inputTrackNode);
     addTrack(inputTrackNode);
-
-    int trackGroupIndex = inputTrackNode->getChanneGroupIndex();
-    auto it = trackGroups.find(trackGroupIndex);
-    if (it != trackGroups.end()) {
-        it.value()->addInputNode(inputTrackNode);
-    } else {
-        trackGroups.insert(trackGroupIndex, QSharedPointer<audio::LocalInputGroup>::create(trackGroupIndex, inputTrackNode));
-    }
-
     return inputTrackNode->getID();
 }
 
