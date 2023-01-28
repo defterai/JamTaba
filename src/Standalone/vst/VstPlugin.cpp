@@ -15,6 +15,7 @@
 #include "audio/core/SamplesBuffer.h"
 #include "midi/MidiMessage.h"
 #include "log/Logging.h"
+#include "Helpers.h"
 
 #include <QLibrary>
 #include <string>
@@ -63,7 +64,7 @@ QSharedPointer<VstPlugin> VstPlugin::load(VstHost* host, const audio::PluginDesc
     audio::PluginDescriptor descriptor = vst::utils::createDescriptor(effect, pluginDescriptor.getPath());
     long ver = effect->dispatcher(effect, effGetVstVersion, 0, 0, NULL, 0);
     qCDebug(jtVstPlugin) << "loading " << descriptor.getName() << " version " << ver;
-    return QSharedPointer<VstPlugin>::create(descriptor, effect, host);
+    return createQSharedPointer<VstPlugin>(descriptor, effect, host);
 }
 
 bool VstPlugin::canGenerateMidiMessages() const

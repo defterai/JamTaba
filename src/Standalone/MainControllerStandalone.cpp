@@ -32,6 +32,7 @@
 #include <QtConcurrent/QtConcurrent>
 #include "log/Logging.h"
 #include "Configurator.h"
+#include "Helpers.h"
 
 using ninjam::client::ServerInfo;
 
@@ -479,7 +480,7 @@ void MainControllerStandalone::start()
             QMessageBox::warning(window, "Audio Initialization Problem!", error.what());
         }
         if (!driver)
-            driver = QSharedPointer<audio::NullAudioDriver>::create();
+            driver = createQSharedPointer<audio::NullAudioDriver>();
 
         audioDriver = driver;
 
@@ -560,7 +561,7 @@ QSharedPointer<audio::Plugin> MainControllerStandalone::createPluginInstance(
     if (descriptor.isNative())
     {
         if (descriptor.getName() == "Delay")
-            return QSharedPointer<audio::JamtabaDelay>::create(audioDriver->getSampleRate());
+            return createQSharedPointer<audio::JamtabaDelay>(audioDriver->getSampleRate());
     }
     else if (descriptor.isVST())
     {

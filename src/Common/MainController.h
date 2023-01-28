@@ -339,8 +339,8 @@ protected:
     AudioMixer audioMixer;
 
     // ninjam
-    QScopedPointer<Service> ninjamService;
-    QScopedPointer<controller::NinjamController> ninjamController;
+    QScopedPointer<Service, QScopedPointerDeleteLater> ninjamService;
+    QScopedPointer<controller::NinjamController, QScopedPointerDeleteLater> ninjamController;
 
     Settings settings;
 

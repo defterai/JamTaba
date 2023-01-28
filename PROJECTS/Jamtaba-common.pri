@@ -165,6 +165,7 @@ HEADERS += gui/JamRoomViewPanel.h
 HEADERS += gui/UsersColorsPool.h
 HEADERS += gui/GuiUtils.h
 HEADERS += gui/ThemeLoader.h
+HEADERS += Helpers.h
 HEADERS += Utils.h
 HEADERS += Configurator.h
 HEADERS += persistence/Settings.h

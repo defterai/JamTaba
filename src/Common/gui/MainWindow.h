@@ -356,7 +356,7 @@ private:
 
     QScopedPointer<MainChat> mainChat;
 
-    QScopedPointer<PrivateServerWindow> privateServerWindow;
+    QScopedPointer<PrivateServerWindow, QScopedPointerDeleteLater> privateServerWindow;
 
     void showBusyDialog(const QString &message);
     void showBusyDialog();
@@ -389,7 +389,7 @@ private:
 
     QMap<QString, JamRoomViewPanel *> roomViewPanels;
 
-    QScopedPointer<NinjamRoomWindow> ninjamWindow;
+    QScopedPointer<NinjamRoomWindow, QScopedPointerDeleteLater> ninjamWindow;
 
     QScopedPointer<login::RoomInfo> roomToJump; // store the next room reference when jumping from on room to another
     QString passwordToJump;

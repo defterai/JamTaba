@@ -23,6 +23,7 @@
 #include "MetronomeUtils.h"
 #include "persistence/Settings.h"
 #include "Utils.h"
+#include "Helpers.h"
 
 #include "gui/chat/NinjamChatMessageParser.h"
 
@@ -420,7 +421,7 @@ QSharedPointer<audio::MetronomeTrackNode> NinjamController::createMetronomeTrack
     audio::metronomeUtils::removeSilenceInBufferStart(offBeatBuffer);
     audio::metronomeUtils::removeSilenceInBufferStart(accentBeatBuffer);
 
-    return QSharedPointer<audio::MetronomeTrackNode>::create(firstBeatBuffer, offBeatBuffer, accentBeatBuffer);
+    return createQSharedPointer<audio::MetronomeTrackNode>(firstBeatBuffer, offBeatBuffer, accentBeatBuffer);
 }
 
 void NinjamController::recreateMetronome(int newSampleRate)
@@ -675,7 +676,7 @@ void NinjamController::addTrack(const User &user, const UserChannel &channel)
         return;
 
     QString uniqueKey = getUniqueKeyForChannel(channel, user.getFullName());
-    auto trackNode = QSharedPointer<NinjamTrackNode>::create();
+    auto trackNode = createQSharedPointer<NinjamTrackNode>();
 
     // checkThread("addTrack();");
     {
@@ -878,12 +879,12 @@ void NinjamController::scheduleEvent(QSharedPointer<SchedulableEvent>&& event) {
 void NinjamController::scheduleBpiChangeEvent(quint16 newBpi, quint16 oldBpi)
 {
     Q_UNUSED(oldBpi);
-    scheduleEvent(QSharedPointer<BpiChangeEvent>::create(this, newBpi));
+    scheduleEvent(createQSharedPointer<BpiChangeEvent>(this, newBpi));
 }
 
 void NinjamController::scheduleBpmChangeEvent(quint16 newBpm)
 {
-    scheduleEvent(QSharedPointer<BpmChangeEvent>::create(this, newBpm));
+    scheduleEvent(createQSharedPointer<BpmChangeEvent>(this, newBpm));
 }
 
 void NinjamController::handleIntervalCompleted(const User &user, quint8 channelIndex,
@@ -939,7 +940,7 @@ void NinjamController::reset()
 
 void NinjamController::scheduleEncoderChangeForChannel(int channelIndex, bool voiceChatActivated)
 {
-    scheduleEvent(QSharedPointer<InputChannelChangedEvent>::create(this, channelIndex, voiceChatActivated));
+    scheduleEvent(createQSharedPointer<InputChannelChangedEvent>(this, channelIndex, voiceChatActivated));
 }
 
 QByteArray NinjamController::encode(const audio::SamplesBuffer &buffer, uint channelIndex, bool lastPart)
@@ -969,7 +970,7 @@ void NinjamController::recreateEncoderForChannel(int channelIndex, bool voiceCha
                                        iterator.value()->getSampleRate() != mainController->getSampleRate())) {   // a new encoder is necessary?
         int sampleRate = mainController->getSampleRate();
         float encodingQuality = voiceChannelActivated ? vorbis::EncoderQualityLow : mainController->getEncodingQuality();
-        encoders[channelIndex] = QSharedPointer<vorbis::Encoder>::create(maxChannelsForEncoding, sampleRate, encodingQuality);
+        encoders[channelIndex] = createQSharedPointer<vorbis::Encoder>(maxChannelsForEncoding, sampleRate, encodingQuality);
     }
 }
 

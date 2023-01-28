@@ -7,6 +7,7 @@
 #include "persistence/Settings.h"
 #include "MainController.h"
 #include "log/Logging.h"
+#include "Helpers.h"
 
 #include <stdexcept>
 #include <algorithm>
@@ -33,9 +34,9 @@ QSharedPointer<PortAudioDriver> PortAudioDriver::CreateInstance(controller::Main
         strongInstance->release();
         driverInstance.clear();
     }
-    strongInstance = QSharedPointer<PortAudioDriver>::create(mainController, audioInputDevice, audioOutputDevice,
-                                                             firstInputIndex, lastInputIndex, firstOutputIndex, lastOutputIndex,
-                                                             sampleRate, bufferSize);
+    strongInstance = createQSharedPointer<PortAudioDriver>(mainController, audioInputDevice, audioOutputDevice,
+                                                           firstInputIndex, lastInputIndex, firstOutputIndex, lastOutputIndex,
+                                                           sampleRate, bufferSize);
     driverInstance = strongInstance;
     return strongInstance;
 }

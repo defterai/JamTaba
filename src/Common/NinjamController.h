@@ -172,7 +172,7 @@ private:
 
     class EncodingThread;
 
-    QScopedPointer<EncodingThread> encodingThread;
+    QScopedPointer<EncodingThread, QScopedPointerDeleteLater> encodingThread;
 
     bool preparedForTransmit;
     int waitingIntervals;

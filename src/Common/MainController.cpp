@@ -7,6 +7,7 @@
 #include "MainController.h"
 #include "NinjamController.h"
 #include "Utils.h"
+#include "Helpers.h"
 #include "loginserver/natmap.h"
 #include "audio/core/AudioNode.h"
 #include "audio/core/LocalInputNode.h"
@@ -50,7 +51,7 @@ MainController::MainController(const Settings &settings) :
     currentStreamingRoomID(-1000),
     started(false),
     masterGain(1),
-    usersDataCache(QSharedPointer<UsersDataCache>::create(Configurator::getInstance()->getCacheDir())),
+    usersDataCache(createQSharedPointer<UsersDataCache>(Configurator::getInstance()->getCacheDir())),
     lastFrameTimeStamp(0),
     emojiManager(":/emoji/emoji.json", ":/emoji/icons")
 {
@@ -537,17 +538,17 @@ QSharedPointer<audio::LocalInputGroup> MainController::createInputTrackGroup(int
     if (it != trackGroups.end()) {
         return it.value();
     }
-    auto group = QSharedPointer<audio::LocalInputGroup>::create(trackGroupIndex);
+    auto group = createQSharedPointer<audio::LocalInputGroup>(trackGroupIndex);
     trackGroups.insert(trackGroupIndex, group);
     return group;
 }
 
 QSharedPointer<audio::LocalInputNode> MainController::createLocalInputNode(int trackID)
 {
-    auto looper = QSharedPointer<audio::Looper>::create(settings.looperSettings.getPreferredMode(),
-                                                        settings.looperSettings.getPreferredLayersCount());
+    auto looper = createQSharedPointer<audio::Looper>(settings.looperSettings.getPreferredMode(),
+                                                      settings.looperSettings.getPreferredLayersCount());
     auto inputGroup = createInputTrackGroup(trackID);
-    auto inputNode = QSharedPointer<audio::LocalInputNode>::create(inputGroup, looper);
+    auto inputNode = createQSharedPointer<audio::LocalInputNode>(inputGroup, looper);
     inputGroup->addInputNode(inputNode);
     inputNode->setGain(1.0f);
     inputNode->setPan(0.0f);
@@ -1009,7 +1010,7 @@ void MainController::start()
     if (!started) {
         qCInfo(jtCore) << "Creating roomStreamer ...";
 
-        roomStreamer = QSharedPointer<audio::NinjamRoomStreamerNode>::create(); // new Audio::AudioFileStreamerNode(":/teste.mp3");
+        roomStreamer = createQSharedPointer<audio::NinjamRoomStreamerNode>(); // new Audio::AudioFileStreamerNode(":/teste.mp3");
         this->audioMixer.addNode(roomStreamer);
 
         connect(ninjamService.data(), &Service::connectedInServer, this, &MainController::connectInNinjamServer);
