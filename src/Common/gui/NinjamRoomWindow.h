@@ -90,6 +90,7 @@ protected:
 
 private:
     QMap<QString, NinjamTrackGroupView *> trackGroups;
+    QMap<int, NinjamTrackView *> trackIndex;
 
     login::RoomInfo roomInfo;
 
@@ -148,8 +149,8 @@ private slots:
     // metronome events
     void setMetronomePanSliderPosition(int value);
     void setMetronomeFaderPosition(int value);
-    void toggleMetronomeMuteStatus();
-    void toggleMetronomeSoloStatus();
+    void toggleMetronomeMuteStatus(bool enabled);
+    void toggleMetronomeSoloStatus(bool enabled);
     void showMetronomePreferences();
     void showMetronomeFloatingWindow(bool show);
     void deleteFloatingWindow();

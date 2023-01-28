@@ -1,6 +1,8 @@
 #ifndef AUDIOPEAK_H
 #define AUDIOPEAK_H
 
+#include <QObject>
+
 namespace audio
 {
 
@@ -47,5 +49,7 @@ inline float AudioPeak::getRightRMS() const
 }
 
 } // namespace
+
+Q_DECLARE_METATYPE(audio::AudioPeak)
 
 #endif // AUDIOPEAK_H

@@ -129,7 +129,7 @@ public:
 
 public slots:
     void enterInRoom(const login::RoomInfo &roomInfo);
-    void openLooperWindow(uint trackID);
+    void openLooperWindow(int trackID);
     void tryEnterInRoom(const login::RoomInfo &roomInfo, const QString &password = "");
 
     void showFeedbackAboutBlockedUserInChat(const QString &userFullName);

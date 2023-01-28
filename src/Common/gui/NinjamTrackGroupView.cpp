@@ -399,7 +399,11 @@ void NinjamTrackGroupView::resetMainLayoutStretch()
 
 NinjamTrackView *NinjamTrackGroupView::createTrackView(long trackID)
 {
-    return new NinjamTrackView(mainController, trackID);
+    auto trackNode = mainController->getTrackNode(trackID).dynamicCast<NinjamTrackNode>();
+    if (trackNode) {
+        return new NinjamTrackView(mainController, trackNode, mainController->getUsersDataCache());
+    }
+    return nullptr;
 }
 
 void NinjamTrackGroupView::setUserName(const QString &userName)
@@ -431,7 +435,9 @@ QSize NinjamTrackGroupView::sizeHint() const
 NinjamTrackView *NinjamTrackGroupView::addTrackView(long trackID)
 {
     NinjamTrackView *newTrackView = dynamic_cast<NinjamTrackView *>(TrackGroupView::addTrackView(trackID));
-    newTrackView->setOrientation(getTracksOrientation());
+    if (newTrackView) {
+        newTrackView->setOrientation(getTracksOrientation());
+    }
     return newTrackView;
 }
 

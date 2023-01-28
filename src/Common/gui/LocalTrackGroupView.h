@@ -29,7 +29,6 @@ public:
     virtual void togglePeakMeterOnlyMode();
     bool isShowingPeakMeterOnly() const;
 
-    void detachMainControllerInSubchannels();
     void closePluginsWindows();
 
     void setToNarrow();

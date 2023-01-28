@@ -52,7 +52,7 @@ LocalTrackViewStandalone* LocalTrackGroupViewStandalone::createTrackView(long tr
 {
     auto controller = dynamic_cast<MainWindowStandalone *>(mainWindow)->getMainController();
 
-    auto trackView = new LocalTrackViewStandalone(controller, trackID );
+    auto trackView = new LocalTrackViewStandalone(controller, controller->createLocalInputNode(trackID));
 
     connect(trackView, &LocalTrackViewStandalone::trackInputChanged, this, &LocalTrackGroupViewStandalone::repaintLocalTracks);
 

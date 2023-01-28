@@ -26,6 +26,11 @@ ChannelRange::ChannelRange() :
 
 }
 
+bool ChannelRange::operator==(const ChannelRange& rhs) const
+{
+    return firstChannel == rhs.firstChannel && channelsCount == rhs.channelsCount;
+}
+
 void ChannelRange::setToStereo()
 {
     this->channelsCount = 2;

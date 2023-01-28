@@ -762,20 +762,21 @@ persistence::LocalInputTrackSettings MainWindow::getInputsSettings() const
         int subchannelsCount = 0;
         trackGroupView->visitTracks<LocalTrackView>([&](LocalTrackView *trackView) {
             auto inputNode = trackView->getInputNode();
-            ChannelRange inputNodeRange = inputNode->getAudioInputRange();
+            const auto& audioInputProps = inputNode->getAudioInputProps();
+            const auto& midiInputProps = inputNode->getMidiInputProps();
             SubChannel subChannel = SubChannel::Builder()
-                    .setFirstInput(inputNodeRange.getFirstChannel())
-                    .setChannelsCount(inputNodeRange.getChannels())
-                    .setMidiDevice(inputNode->getMidiDeviceIndex())
-                    .setMidiChannel(inputNode->getMidiChannelIndex())
+                    .setFirstInput(audioInputProps.getChannelRange().getFirstChannel())
+                    .setChannelsCount(audioInputProps.getChannelRange().getChannels())
+                    .setMidiDevice(midiInputProps.getDevice())
+                    .setMidiChannel(midiInputProps.getChannel())
                     .setGain(Utils::poweredGainToLinear(inputNode->getGain()))
                     .setBoost(Utils::linearToDb(inputNode->getBoost()))
                     .setPan(inputNode->getPan())
                     .setMuted(inputNode->isMuted())
-                    .setStereoInverted(inputNode->isStereoInverted())
-                    .setTranspose(inputNode->getTranspose())
-                    .setLowerMidiNote(inputNode->getMidiLowerNote())
-                    .setHigherMidiNote(inputNode->getMidiHigherNote())
+                    .setStereoInverted(audioInputProps.isStereoInverted())
+                    .setTranspose(midiInputProps.getTranspose())
+                    .setLowerMidiNote(midiInputProps.getLowerNote())
+                    .setHigherMidiNote(midiInputProps.getHigherNote())
                     .setRoutingMidiToFirstSubchannel(subchannelsCount > 0 && inputNode->isRoutingMidiInput()) // midi routing is not allowed in first subchannel
                     .build();
             channelBuilder.addSubChannel(subChannel);
@@ -961,11 +962,10 @@ void MainWindow::removeAllInputLocalTracks()
 // this function is overrided in MainWindowStandalone to load input selections and plugins
 void MainWindow::initializeLocalSubChannel(LocalTrackView *localTrackView, const SubChannel &subChannel)
 {
-    auto boostValue = BaseTrackView::intToBoostValue(subChannel.getBoost());
-    localTrackView->setInitialValues(subChannel.getGain(), boostValue, subChannel.getPan(), subChannel.isMuted(), subChannel.isStereoInverted());
+    localTrackView->setInitialValues(subChannel.getGain(), subChannel.getBoost(), subChannel.getPan(), subChannel.isMuted(), subChannel.isStereoInverted());
 }
 
-void MainWindow::openLooperWindow(uint trackID)
+void MainWindow::openLooperWindow(int trackID)
 {
     Q_ASSERT(mainController);
 
@@ -2326,9 +2326,6 @@ MainWindow::~MainWindow()
 
     if (mainController)
         mainController->stop();
-
-    for (LocalTrackGroupView *groupView : qAsConst(this->localGroupChannels))
-        groupView->detachMainControllerInSubchannels();
 
     mainController = nullptr;
 

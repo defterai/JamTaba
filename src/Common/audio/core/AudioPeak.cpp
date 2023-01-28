@@ -11,6 +11,7 @@ AudioPeak::AudioPeak(float leftPeak, float rightPeak, float rmsLeft, float rmsRi
 
     rms[0] = rmsLeft;
     rms[1] = rmsRight;
+    qRegisterMetaType<AudioPeak>();
 }
 
 AudioPeak::AudioPeak()

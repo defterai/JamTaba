@@ -18,6 +18,7 @@
 #include "Utils.h"
 #include "IconFactory.h"
 #include "audio/NinjamTrackNode.h"
+#include "NinjamController.h"
 #include "widgets/BoostSpinBox.h"
 #include "widgets/PeakMeter.h"
 #include "widgets/InstrumentsMenu.h"
@@ -30,8 +31,12 @@ quint32 NinjamTrackView::networkUsageUpdatePeriod = 4000;
 using controller::MainController;
 using persistence::CacheEntry;
 
-NinjamTrackView::NinjamTrackView(MainController *mainController, long trackID) :
-    BaseTrackView(mainController, trackID),
+NinjamTrackView::NinjamTrackView(controller::MainController* mainController,
+                                 const QSharedPointer<NinjamTrackNode>& trackNode,
+                                 const QSharedPointer<persistence::UsersDataCache>& userDataCache) :
+    BaseTrackView(trackNode),
+    mainController(mainController),
+    userDataCache(userDataCache),
     orientation(Qt::Vertical),
     downloadingFirstInterval(true),
     lastNetworkUsageUpdate(0)
@@ -111,12 +116,8 @@ void NinjamTrackView::paintEvent(QPaintEvent *ev)
 
 void NinjamTrackView::instrumentIconChanged(quint8 instrumentIndex)
 {
-    if (mainController) {
-        cacheEntry.setInstrumentIndex(instrumentIndex);
-        auto cache = mainController->getUsersDataCache();
-        if (cache)
-            cache->updateUserCacheEntry(cacheEntry);
-    }
+    cacheEntry.setInstrumentIndex(instrumentIndex);
+    updateUserCacheEntry();
 }
 
 void NinjamTrackView::setTintColor(const QColor &color)
@@ -143,7 +144,7 @@ void NinjamTrackView::setReceiveState(bool receive)
 
 QSharedPointer<NinjamTrackNode> NinjamTrackView::getTrackNode() const
 {
-    return mainController->getTrackNode(getTrackID()).dynamicCast<NinjamTrackNode>();
+    return trackNode.lock().dynamicCast<NinjamTrackNode>();
 }
 
 QPushButton *NinjamTrackView::createReceiveButton() const
@@ -180,8 +181,6 @@ void NinjamTrackView::updateLowCutButtonToolTip()
 
 QString NinjamTrackView::getLowCutStateText() const
 {
-    Q_ASSERT(mainController);
-
     auto trackNode = getTrackNode();
 
     if (trackNode) {
@@ -480,44 +479,40 @@ void NinjamTrackView::setChannelName(const QString &name)
     instrumentsButton->setInstrumentIcon(guessInstrumentIcon());
 }
 
+void NinjamTrackView::updateUserCacheEntry()
+{
+    auto userDataCache = this->userDataCache.lock();
+    if (userDataCache) {
+        userDataCache->updateUserCacheEntry(cacheEntry);
+    }
+}
+
 void NinjamTrackView::setPan(int value)
 {
     BaseTrackView::setPan(value);
-
-    auto trackNode = getTrackNode();
-    if (trackNode)
-        cacheEntry.setPan(trackNode->getPan());
-
-    mainController->getUsersDataCache()->updateUserCacheEntry(cacheEntry);
+    cacheEntry.setPan(value / (float)panSlider->maximum());
+    updateUserCacheEntry();
 }
 
 void NinjamTrackView::setGain(int value)
 {
     BaseTrackView::setGain(value);
     cacheEntry.setGain(value/100.0);
-    mainController->getUsersDataCache()->updateUserCacheEntry(cacheEntry);
+    updateUserCacheEntry();
 }
 
-void NinjamTrackView::toggleMuteStatus()
+void NinjamTrackView::toggleMuteStatus(bool enabled)
 {
-    BaseTrackView::toggleMuteStatus();
-
-    auto trackNode = getTrackNode();
-    if (trackNode)
-        cacheEntry.setMuted(trackNode->isMuted());
-
-    mainController->getUsersDataCache()->updateUserCacheEntry(cacheEntry);
+    BaseTrackView::toggleMuteStatus(enabled);
+    cacheEntry.setMuted(enabled);
+    updateUserCacheEntry();
 }
 
 void NinjamTrackView::updateBoostValue(int index)
 {
     BaseTrackView::updateBoostValue(index);
-
-    auto trackNode = getTrackNode();
-    if (trackNode) {
-        cacheEntry.setBoost(trackNode->getBoost());
-        mainController->getUsersDataCache()->updateUserCacheEntry(cacheEntry);
-    }
+    cacheEntry.setBoost(Utils::dbToLinear(index));
+    updateUserCacheEntry();
 }
 
 void NinjamTrackView::setLowCutToNextState()
@@ -527,7 +522,7 @@ void NinjamTrackView::setLowCutToNextState()
         NinjamTrackNode::LowCutState newState = node->setLowCutToNextState();
 
         cacheEntry.setLowCutState(newState);
-        mainController->getUsersDataCache()->updateUserCacheEntry(cacheEntry);
+        updateUserCacheEntry();
 
         updateLowCutButtonToolTip();
 

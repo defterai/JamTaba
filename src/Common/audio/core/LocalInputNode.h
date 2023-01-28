@@ -3,6 +3,7 @@
 
 #include "AudioNode.h"
 #include "looper/Looper.h"
+#include <array>
 
 namespace midi {
     class MidiMessage;
@@ -11,6 +12,63 @@ namespace midi {
 namespace audio {
 
 class LocalInputGroup;
+
+enum class LocalInputMode
+{
+    AUDIO,
+    MIDI,
+    DISABLED,
+};
+
+class LocalAudioInputProps final
+{
+public:
+    LocalAudioInputProps();
+    LocalAudioInputProps(int firstChannel, int channelsCount);
+    bool operator==(const LocalAudioInputProps&) const;
+    void reset();
+    void setChannelRange(const ChannelRange& channelRange);
+    inline const ChannelRange& getChannelRange() const { return inputRange; }
+    inline int getChannels() const { return inputRange.getChannels(); }
+    void setStereoInversion(bool stereoInverted);
+    inline bool isStereoInverted() const { return stereoInverted; }
+private:
+    ChannelRange inputRange;
+    // store user selected input range. For example, user can choose just the
+    // right input channel (index 1), or use stereo input (indexes 0 and 1), or
+    // use the channels 2 and 3 (the second input pair in a multichannel audio interface)
+    bool stereoInverted;
+};
+
+class MidiInputProps final
+{
+public:
+    MidiInputProps();
+    bool operator==(const MidiInputProps&) const;
+    void disable();
+    inline void setDevice(int index) { device = index; }
+    inline int getDevice() const { return device; }
+    inline void setChannel(int index) { channel = index; }
+    inline int getChannel() const { return channel; }
+    inline quint8 getHigherNote() const { return higherNote; }
+    void setHigherNote(quint8 higherNote);
+    inline quint8 getLowerNote() const { return lowerNote; }
+    void setLowerNote(quint8 lowerNote);
+    bool isReceivingAllMidiChannels() const;
+    //void updateActivity(const midi::MidiMessage &message);
+    bool accept(const midi::MidiMessage &message) const;
+    inline qint8 getTranspose() const { return transpose; }
+    void setTranspose(qint8 newTranspose);
+    inline bool isLearning() const { return learning; }
+    void setLearning(bool learning) { this->learning = learning; }
+private:
+    int device; // setted when user choose MIDI as input method
+    int channel;
+    quint8 lowerNote;
+    quint8 higherNote;
+    qint8 transpose;
+    bool learning; // is waiting to learn a midi note?
+};
 
 class LocalInputNode : public AudioNode
 {
@@ -22,35 +80,7 @@ public:
     void processReplacing(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, std::vector<midi::MidiMessage> &midiBuffer) override;
     virtual int getSampleRate() const;
 
-    int getChannels() const;
-
-    bool isMono() const;
-
-    bool isStereo() const;
-
-    bool isNoInput() const;
-
-    bool isMidi() const;
-
-    bool isAudio() const;
-
-    void setStereoInversion(bool stereoInverted);
-
-    bool isStereoInverted() const;
-
-    void setAudioInputSelection(int firstChannelIndex, int channelCount);
-
-    void setMidiInputSelection(int midiDeviceIndex, int midiChannelIndex);
-
-    void setToNoInput();
-
-    int getMidiDeviceIndex() const;
-
-    int getMidiChannelIndex() const;
-
-    bool isReceivingAllMidiChannels() const;
-
-    ChannelRange getAudioInputRange() const;
+    LocalInputMode getInputMode() const;
 
     const QSharedPointer<LocalInputGroup>& getChannelGroup() const;
     int getChannelGroupIndex() const;
@@ -68,21 +98,10 @@ public:
 
     void resetMidiActivity();
 
-    void setMidiLowerNote(quint8 newLowerNote);
-
-    void setMidiHigherNote(quint8 newHigherNote);
-
-    void setTranspose(qint8 transpose);
+    const LocalAudioInputProps& getAudioInputProps() const;
+    const MidiInputProps& getMidiInputProps() const;
 
     qint8 getTranspose() const;
-
-    quint8 getMidiLowerNote() const;
-
-    quint8 getMidiHigherNote() const;
-
-    void startMidiNoteLearn();
-    void stopMidiNoteLearn();
-    bool isLearningMidiNote() const;
 
     void reset() override;
 
@@ -100,60 +119,57 @@ public:
 
     const QSharedPointer<Looper>& getLooper() const;
 
+    virtual void addProcessor(const QSharedPointer<AudioNodeProcessor> &newProcessor, quint32 slotIndex);
+    void swapProcessors(quint32 firstSlotIndex, quint32 secondSlotIndex);
+    void removeProcessor(const QSharedPointer<AudioNodeProcessor> &processor);
+    void suspendProcessors();
+    void resumeProcessors();
+    virtual void updateProcessorsGui();
+
+    static const quint8 MAX_PROCESSORS_PER_TRACK = 4;
 signals:
     void midiNoteLearned(quint8 midiNote);
-    void stereoInversionChanged(bool stereoInverted);
+    void stereoInversionChanged(bool stereoInverted, void* sender);
+    void inputModeChanged(audio::LocalInputMode inputMode, void* sender);
+    void audioInputPropsChanged(audio::LocalAudioInputProps audioInput, void* sender);
+    void midiInputPropsChanged(audio::MidiInputProps midiInput, void* sender);
+
+    void postSetStereoInversion(bool stereoInverted, void* sender);
+    void postSetInputMode(audio::LocalInputMode inputMode, void* sender);
+    void postSetAudioInputProps(audio::LocalAudioInputProps audioInputProps, void* sender);
+    void postSetMidiInputProps(audio::MidiInputProps midiInputProps, void* sender);
 
 protected:
+    void pluginsProcess(audio::SamplesBuffer &out, std::vector<midi::MidiMessage> &midiBuffer) override;
     void preFaderProcess(audio::SamplesBuffer &out) override;
     void postFaderProcess(audio::SamplesBuffer &out) override;
 
 private:
+    using ProcessorsArray = std::array<QSharedPointer<AudioNodeProcessor>, MAX_PROCESSORS_PER_TRACK>;
 
-    ChannelRange audioInputRange;
-    // store user selected input range. For example, user can choose just the
-    // right input channel (index 1), or use stereo input (indexes 0 and 1), or
-    // use the channels 2 and 3 (the second input pair in a multichannel audio interface)
-
-    class MidiInput
-    {
-    public:
-        MidiInput();
-        void disable();
-        void setHigherNote(quint8 higherNote);
-        void setLowerNote(quint8 lowerNote);
-        bool isReceivingAllMidiChannels() const;
-        void updateActivity(const midi::MidiMessage &message);
-        bool accept(const midi::MidiMessage &message) const;
-        void setTranspose(qint8 newTranspose);
-        inline bool isLearning() const { return learning; }
-
-        int device; // setted when user choose MIDI as input method
-        int channel;
-        quint8 lastMidiActivity; // last max velocity or control value
-        quint8 lowerNote;
-        quint8 higherNote;
-        qint8 transpose;
-        bool learning; //is waiting to learn a midi note?
-    };
-
-    MidiInput midiInput;
+    ProcessorsArray processors;
+    LocalAudioInputProps audioInputProps;
+    MidiInputProps midiInputProps;
+    quint8 lastMidiActivity; // last max velocity or control value
     QSharedPointer<LocalInputGroup> inputGroup;
-
-    bool stereoInverted;
 
     bool receivingRoutedMidiInput; // true when this is the first subchannel and is receiving midi input from second subchannel (rounted midi input)? issue #102
     bool routingMidiInput; // true when this is the second channel and is sending midi messages to the first channel
 
-    enum InputMode {
-        AUDIO, MIDI, DISABLED
-    };
+    LocalInputMode inputMode = LocalInputMode::DISABLED;
 
-    InputMode inputMode = DISABLED;
+    ProcessorsArray getProcessors() const;
 
     bool canProcessMidiMessage(const midi::MidiMessage &msg) const;
 
     void processIncommingMidi(std::vector<midi::MidiMessage> &inBuffer, std::vector<midi::MidiMessage> &outBuffer);
+    void updateMidiActivity(const midi::MidiMessage &message);
+
+    void setInputMode(LocalInputMode inputMode, void* sender);
+
+    void setStereoInversion(bool stereoInverted, void* sender);
+    void setAudioInputProps(LocalAudioInputProps props, void* sender);
+    void setMidiInputProps(MidiInputProps props, void* sender);
 
     QSharedPointer<Looper> looper;
 };
@@ -165,7 +181,7 @@ inline const QSharedPointer<Looper>& LocalInputNode::getLooper() const
 
 inline bool LocalInputNode::isRoutingMidiInput() const
 {
-    return isMidi() && routingMidiInput;
+    return (inputMode == LocalInputMode::MIDI) && routingMidiInput;
 }
 
 inline bool LocalInputNode::isReceivingRoutedMidiInput() const
@@ -173,44 +189,9 @@ inline bool LocalInputNode::isReceivingRoutedMidiInput() const
     return receivingRoutedMidiInput;
 }
 
-inline bool LocalInputNode::isLearningMidiNote() const
-{
-    return midiInput.learning;
-}
-
-inline quint8 LocalInputNode::getMidiHigherNote() const
-{
-    return midiInput.higherNote;
-}
-
-inline quint8 LocalInputNode::getMidiLowerNote() const
-{
-    return midiInput.lowerNote;
-}
-
 inline int LocalInputNode::getSampleRate() const
 {
     return 0;
-}
-
-inline int LocalInputNode::getChannels() const
-{
-    return audioInputRange.getChannels();
-}
-
-inline int LocalInputNode::getMidiDeviceIndex() const
-{
-    return midiInput.device;
-}
-
-inline int LocalInputNode::getMidiChannelIndex() const
-{
-    return midiInput.channel;
-}
-
-inline ChannelRange LocalInputNode::getAudioInputRange() const
-{
-    return audioInputRange;
 }
 
 inline const QSharedPointer<LocalInputGroup>& LocalInputNode::getChannelGroup() const
@@ -225,17 +206,17 @@ inline const audio::SamplesBuffer &LocalInputNode::getLastBuffer() const
 
 inline bool LocalInputNode::hasMidiActivity() const
 {
-    return midiInput.lastMidiActivity > 0;
+    return lastMidiActivity > 0;
 }
 
 inline quint8 LocalInputNode::getMidiActivityValue() const
 {
-    return midiInput.lastMidiActivity;
+    return lastMidiActivity;
 }
 
 inline void LocalInputNode::resetMidiActivity()
 {
-    midiInput.lastMidiActivity = 0;
+    lastMidiActivity = 0;
 }
 
 inline bool LocalInputNode::isActivated() const
@@ -244,5 +225,8 @@ inline bool LocalInputNode::isActivated() const
 }
 
 } // namespace
+
+Q_DECLARE_METATYPE(audio::LocalAudioInputProps)
+Q_DECLARE_METATYPE(audio::MidiInputProps)
 
 #endif

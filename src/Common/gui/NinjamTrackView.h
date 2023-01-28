@@ -21,7 +21,9 @@ class NinjamTrackView : public BaseTrackView
     Q_OBJECT
 
 public:
-    NinjamTrackView(controller::MainController *mainController, long trackID);
+    NinjamTrackView(controller::MainController* mainController,
+                    const QSharedPointer<NinjamTrackNode>& trackNode,
+                    const QSharedPointer<persistence::UsersDataCache>& userDataCache);
     void setChannelName(const QString &name);
     void setInitialValues(const persistence::CacheEntry &initialValues);
     void setNinjamChannelData(const QString &userFullName, quint8 channelIndex);
@@ -64,6 +66,8 @@ private:
     QPushButton *buttonReceive;
     QHBoxLayout *networkUsageLayout;
     QLabel *networkUsageLabel;
+    controller::MainController* mainController;
+    QWeakPointer<persistence::UsersDataCache> userDataCache;
     persistence::CacheEntry cacheEntry; // used to remember the track controls values
     IntervalChunksDisplay *chunksDisplay; // display downloaded interval chunks
     InstrumentsButton *instrumentsButton;
@@ -104,9 +108,11 @@ private:
 
     quint64 updateCounter = 0;
 
+    void updateUserCacheEntry();
+
 protected slots:
     // overriding the base class slots
-    void toggleMuteStatus() override;
+    void toggleMuteStatus(bool enabled) override;
     void setGain(int value) override;
     void setPan(int value) override;
     void updateBoostValue(int) override;

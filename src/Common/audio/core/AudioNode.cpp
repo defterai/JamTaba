@@ -40,26 +40,8 @@ void AudioNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out, in
 
     internalOutputBuffer.set(internalInputBuffer); // if we have no plugins inserted the input samples are just copied  to output buffer.
 
-    static SamplesBuffer tempInputBuffer(2);
-
     // process inserted plugins
-    for (int i=0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        auto processor = processors[i];
-        if (processor && !processor->isBypassed()) {
-            tempInputBuffer.setFrameLenght(internalOutputBuffer.getFrameLenght());
-            tempInputBuffer.set(internalOutputBuffer); // the output from previous plugin is used as input to the next plugin in the chain
-
-            processor->process(tempInputBuffer, internalOutputBuffer, midiBuffer);
-
-            // some plugins are blocking the midi messages. If a VSTi can't generate messages the previous messages list will be sended for the next plugin in the chain. The messages list is cleared only when the plugin can generate midi messages.
-            if (processor->isVirtualInstrument() && processor->canGenerateMidiMessages())
-                midiBuffer.clear(); // only the fresh messages will be passed by the next plugin in the chain
-
-
-            auto pulledMessages = processor->pullGeneratedMidiMessages();
-            midiBuffer.insert(midiBuffer.end(), pulledMessages.begin(), pulledMessages.end());
-        }
-    }
+    pluginsProcess(internalOutputBuffer, midiBuffer);
 
     preFaderProcess(internalOutputBuffer); //call overrided preFaderProcess in subclasses to allow some preFader process.
 
@@ -70,6 +52,8 @@ void AudioNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out, in
     postFaderProcess(internalOutputBuffer);
 
     out.add(internalOutputBuffer);
+
+    emit audioPeakChanged(lastPeak);
 }
 
 void AudioNode::setRmsWindowSize(int samples)
@@ -92,10 +76,16 @@ AudioNode::AudioNode() :
     boost(1),
     resamplingCorrection(0)
 {
+    QObject::connect(this, &AudioNode::postGain, this, &AudioNode::setGain);
+    QObject::connect(this, &AudioNode::postPan, this, &AudioNode::setPan);
+    QObject::connect(this, &AudioNode::postBoost, this, &AudioNode::setBoost);
+    QObject::connect(this, &AudioNode::postMute, this, &AudioNode::setMute);
+    QObject::connect(this, &AudioNode::postSolo, this, &AudioNode::setSolo);
+}
 
-    for (int i=0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        processors[i] = nullptr;
-    }
+AudioNode::~AudioNode()
+{
+
 }
 
 int AudioNode::getInputResamplingLength(int sourceSampleRate, int targetSampleRate, int outFrameLenght)
@@ -122,50 +112,52 @@ AudioPeak AudioNode::getLastPeak() const
 void AudioNode::resetLastPeak()
 {
     lastPeak.zero();
+    emit audioPeakChanged(lastPeak);
 }
 
-void AudioNode::setPan(float pan)
+void AudioNode::setPan(float pan, void* sender)
 {
-    if (pan < -1)
+    if (pan < -1) {
         pan = -1;
-
-    if (pan > 1)
+    } else if (pan > 1) {
         pan = 1;
-
-    this->pan = pan;
-
-    updateGains();
-
-    emit panChanged(this->pan);
-}
-
-void AudioNode::setGain(float gainValue)
-{
-    this->gain = gainValue;
-
-    emit gainChanged(this->gain);
-}
-
-void AudioNode::setBoost(float boostValue)
-{
-    this->boost = boostValue;
-
-    emit boostChanged(this->boost);
-}
-
-void AudioNode::setMute(bool muteStatus)
-{
-    if (this->muted != muteStatus) {
-        this->muted = muteStatus;
-        emit muteChanged(muteStatus);
+    }
+    if (!qFuzzyCompare(this->pan, pan)) {
+        this->pan = pan;
+        updateGains();
+        emit panChanged(pan, sender);
     }
 }
 
-void AudioNode::setSolo(bool soloed)
+void AudioNode::setGain(float gainValue, void* sender)
+{
+    if (!qFuzzyCompare(this->gain, gainValue)) {
+        this->gain = gainValue;
+        emit gainChanged(gainValue, sender);
+    }
+}
+
+void AudioNode::setBoost(float boostValue, void* sender)
+{
+    if (!qFuzzyCompare(this->boost, boostValue)) {
+        this->boost = boostValue;
+        emit boostChanged(boostValue, sender);
+    }
+}
+
+void AudioNode::setMute(bool muteStatus, void* sender)
+{
+    if (this->muted != muteStatus) {
+        this->muted = muteStatus;
+        emit muteChanged(muteStatus, sender);
+    }
+}
+
+void AudioNode::setSolo(bool soloed, void* sender)
 {
     if (this->soloed != soloed) {
         this->soloed = soloed;
-        emit soloChanged(this->soloed);
+        emit soloChanged(soloed, sender);
     }
 }
 
@@ -185,76 +177,22 @@ void AudioNode::updateGains()
     rightGain = (float)(ROOT_2_OVER_2 * (cos(angle) + sin(angle)));
 }
 
-AudioNode::~AudioNode()
-{
-
-}
-
 bool AudioNode::connect(AudioNode &other)
 {
-    QMutexLocker(&(other.mutex));
-
-    other.connections.insert(this);
-
-    return true;
-}
-
-bool AudioNode::disconnect(AudioNode &otherNode)
-{
-    QMutexLocker(&(otherNode.mutex));
-    otherNode.connections.remove(this);
-    return true;
-}
-
-void AudioNode::addProcessor(const QSharedPointer<AudioNodeProcessor> &newProcessor, quint32 slotIndex)
-{
-    assert(newProcessor);
-    assert(slotIndex < MAX_PROCESSORS_PER_TRACK);
-    processors[slotIndex] = newProcessor;
-}
-
-void AudioNode::swapProcessors(quint32 firstSlotIndex, quint32 secondSlotIndex)
-{
-    assert(firstSlotIndex < MAX_PROCESSORS_PER_TRACK);
-    assert(secondSlotIndex < MAX_PROCESSORS_PER_TRACK);
-    if (firstSlotIndex != secondSlotIndex) {
-        qSwap(processors[firstSlotIndex], processors[secondSlotIndex]);
+    if (&other != this) {
+        QMutexLocker(&(other.mutex));
+        other.connections.insert(this);
+        return true;
     }
+    return false;
 }
 
-void AudioNode::removeProcessor(const QSharedPointer<AudioNodeProcessor> &processor)
+bool AudioNode::disconnect(AudioNode &other)
 {
-    assert(processor);
-    processor->suspend();
-    for (int i = 0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        if (processors[i] == processor){
-            processors[i] = nullptr;
-            break;
-        }
+    if (&other != this) {
+        QMutexLocker(&(other.mutex));
+        other.connections.remove(this);
+        return true;
     }
-}
-
-void AudioNode::suspendProcessors()
-{
-    for (int i = 0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        if (processors[i])
-            processors[i]->suspend();
-    }
-}
-
-void AudioNode::updateProcessorsGui()
-{
-    QMutexLocker locker(&mutex);
-    for (int i = 0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        if (processors[i])
-            processors[i]->updateGui();
-    }
-}
-
-void AudioNode::resumeProcessors()
-{
-    for (int i = 0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        if (processors[i])
-            processors[i]->resume();
-    }
+    return false;
 }

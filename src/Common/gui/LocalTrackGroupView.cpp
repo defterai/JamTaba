@@ -9,6 +9,7 @@
 #include "widgets/InstrumentsMenu.h"
 #include "gui/GuiUtils.h"
 #include "audio/core/LocalInputNode.h"
+#include "audio/core/LocalInputGroup.h"
 #include "ninjam/client/Types.h"
 
 #include <QInputDialog>
@@ -71,7 +72,10 @@ void LocalTrackGroupView::setAsVideoChannel()
 
     visitTracks<LocalTrackView>([&](LocalTrackView *track) {
         track->setVisible(false);
-        track->getInputNode()->setToNoInput();
+        auto inputTrack = track->getInputNode();
+        if (inputTrack) {
+            emit inputTrack->postSetInputMode(audio::LocalInputMode::DISABLED, this);
+        }
     });
 
     toolButton->setVisible(false);
@@ -320,8 +324,9 @@ void LocalTrackGroupView::addSubChannel()
 int LocalTrackGroupView::getSubchannelInternalIndex(uint subchannelTrackID) const
 {
     for (int i = 0; i < trackViews.count(); ++i) {
-        if (static_cast<uint>(trackViews.at(i)->getTrackID()) == subchannelTrackID)
+        if (trackViews.at(i)->getTrackID() == subchannelTrackID) {
             return i;
+        }
     }
 
     return -1;
@@ -346,7 +351,8 @@ LocalTrackView *LocalTrackGroupView::addTrackView(long trackID)
 
 LocalTrackView *LocalTrackGroupView::createTrackView(long trackID)
 {
-    return new LocalTrackView(mainWindow->getMainController(), trackID);
+    auto mainController = mainWindow->getMainController();
+    return new LocalTrackView(mainController->createLocalInputNode(trackID));
 }
 
 void LocalTrackGroupView::setToWide()
@@ -389,13 +395,6 @@ void LocalTrackGroupView::removeSubchannel()
         removeTrackView(1); // always remove the second channel
         emit trackRemoved();
     }
-}
-
-void LocalTrackGroupView::detachMainControllerInSubchannels()
-{
-    visitTracks<LocalTrackView>([&](LocalTrackView *view) {
-        view->detachMainController();
-    });
 }
 
 void LocalTrackGroupView::removeChannel()

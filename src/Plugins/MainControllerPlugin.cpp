@@ -30,7 +30,8 @@ int MainControllerPlugin::addInputTrackNode(QSharedPointer<audio::LocalInputNode
 
     // VST plugins always use audio as input
     int firstChannelIndex = (inputTracks.size()-1) * 2;
-    inputTrackNode->setAudioInputSelection(firstChannelIndex, 2);
+    emit inputTrackNode->postSetAudioInputProps(audio::LocalAudioInputProps(firstChannelIndex, 2), this); //stereo
+    emit inputTrackNode->postSetInputMode(audio::LocalInputMode::AUDIO, this);
     return inputTrackID;
 }
 

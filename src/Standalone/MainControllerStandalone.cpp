@@ -50,15 +50,15 @@ void MainControllerStandalone::setInputTrackToMono(int localChannelIndex,
             inputIndexInAudioDevice = 0;
 
         int availableInputs = audioDriver->getInputsCount();
-        if (availableInputs > 0)
-            inputTrack->setAudioInputSelection(inputIndexInAudioDevice, 1);    // mono
-        else
-            inputTrack->setToNoInput();
-
+        if (availableInputs > 0) {
+            emit inputTrack->postSetAudioInputProps(audio::LocalAudioInputProps(inputIndexInAudioDevice, 1), this); // mono
+            emit inputTrack->postSetInputMode(audio::LocalInputMode::AUDIO, this);
+        } else {
+            emit inputTrack->postSetInputMode(audio::LocalInputMode::DISABLED, this);
+        }
         if (window)
         {
-            window->refreshTrackInputSelection(
-                localChannelIndex);
+            window->refreshTrackInputSelection(localChannelIndex);
         }
 
         if (isPlayingInNinjamRoom())
@@ -182,17 +182,18 @@ bool MainControllerStandalone::inputIndexIsValid(int inputIndex)
     return inputIndex >= 0 && inputIndex <= audioDriver->getInputsCount();
 }
 
-void MainControllerStandalone::setInputTrackToMIDI(int localChannelIndex, int midiDevice,
-                                                   int midiChannel, qint8 transpose,
-                                                   quint8 lowerNote, quint8 higherNote)
+void MainControllerStandalone::setInputTrackToMIDI(int localChannelIndex, const audio::MidiInputProps& midiInpuProps)
 {
     auto inputTrack = getInputTrack(localChannelIndex);
     if (inputTrack)
     {
-        inputTrack->setMidiInputSelection(midiDevice, midiChannel);
-        inputTrack->setTranspose(transpose);
-        inputTrack->setMidiHigherNote(higherNote);
-        inputTrack->setMidiLowerNote(lowerNote);
+        emit inputTrack->postSetMidiInputProps(midiInpuProps, this);
+        emit inputTrack->postSetInputMode(audio::LocalInputMode::MIDI, this);
+
+        /*emit inputTrack->postSetTranspose(transpose);
+        emit inputTrack->postSetMidiHigherNote(higherNote);
+        emit inputTrack->postSetMidiLowerNote(lowerNote);
+        emit inputTrack->postSetMidiInputSelection(midiDevice, midiChannel);*/
         if (window)
             window->refreshTrackInputSelection(localChannelIndex);
         if (isPlayingInNinjamRoom())
@@ -211,7 +212,7 @@ void MainControllerStandalone::setInputTrackToNoInput(int localChannelIndex)
     auto inputTrack = getInputTrack(localChannelIndex);
     if (inputTrack)
     {
-        inputTrack->setToNoInput();
+        emit inputTrack->postSetInputMode(audio::LocalInputMode::DISABLED, this);
         if (window)
             window->refreshTrackInputSelection(localChannelIndex);
         if (isPlayingInNinjamRoom())      // send the finish interval message
@@ -240,14 +241,16 @@ void MainControllerStandalone::setInputTrackToStereo(int localChannelIndex, int 
         int availableInputChannels = audioDriver->getInputsCount();
         if (availableInputChannels > 0)      // we have input channels?
         {
-            if (availableInputChannels >= 2)     // can really use stereo?
-                inputTrack->setAudioInputSelection(firstInputIndex, 2);    // stereo
-            else
-                inputTrack->setAudioInputSelection(firstInputIndex, 1);    // mono
+            if (availableInputChannels >= 2) {    // can really use stereo?
+                emit inputTrack->postSetAudioInputProps(audio::LocalAudioInputProps(firstInputIndex, 2), this);    // stereo
+            } else {
+                emit inputTrack->postSetAudioInputProps(audio::LocalAudioInputProps(firstInputIndex, 1), this);    // mono
+            }
+            emit inputTrack->postSetInputMode(audio::LocalInputMode::AUDIO, this);
         }
         else
         {
-            inputTrack->setToNoInput();
+            emit inputTrack->postSetInputMode(audio::LocalInputMode::DISABLED, this);
         }
 
         if (window)
@@ -839,45 +842,48 @@ void MainControllerStandalone::updateInputTracksRange()
         if (!inputTrack)
             continue;
 
-        if (!inputTrack->isNoInput())
+        switch (inputTrack->getInputMode()) {
+        case audio::LocalInputMode::AUDIO:   // audio track
         {
-            if (inputTrack->isAudio())   // audio track
-            {
-                auto inputTrackRange = inputTrack->getAudioInputRange();
-
-                /** If global input range is reduced to 2 channels and user previous selected inputs 3+4 the input range need be corrected to avoid a beautiful crash :) */
-                int globalInputs = audioDriver->getInputsCount();
-                if (inputTrackRange.getFirstChannel() >= globalInputs)
-                {
-                    if (globalInputs >= inputTrackRange.getChannels())   // we have enough channels?
-                    {
-                        if (inputTrackRange.isMono())
-                            setInputTrackToMono(trackIndex, 0);
-                        else
-                            setInputTrackToStereo(trackIndex, 0);
-                    }
+            auto inputTrackRange = inputTrack->getAudioInputProps().getChannelRange();
+            /** If global input range is reduced to 2 channels and user previous selected inputs 3+4 the input range need be corrected to avoid a beautiful crash :) */
+            int globalInputs = audioDriver->getInputsCount();
+            if (inputTrackRange.getFirstChannel() >= globalInputs) {
+                if (globalInputs >= inputTrackRange.getChannels()) {   // we have enough channels?
+                    if (inputTrackRange.isMono())
+                        setInputTrackToMono(trackIndex, 0);
                     else
-                    {
-                        setInputTrackToNoInput(trackIndex);
-                    }
+                        setInputTrackToStereo(trackIndex, 0);
+                }
+                else {
+                    setInputTrackToNoInput(trackIndex);
                 }
             }
-            else     // midi track
-            {
-                int selectedDevice = inputTrack->getMidiDeviceIndex();
-                bool deviceIsValid = selectedDevice >= 0
-                                     && selectedDevice < midiDriver->getMaxInputDevices()
-                                     && midiDriver->inputDeviceIsGloballyEnabled(selectedDevice);
-                if (!deviceIsValid)
-                {
-                    // try another available midi input device
-                    int firstAvailableDevice = midiDriver->getFirstGloballyEnableInputDevice();
-                    if (firstAvailableDevice >= 0)
-                        setInputTrackToMIDI(trackIndex, firstAvailableDevice, -1); // select all channels
-                    else
-                        setInputTrackToNoInput(trackIndex);
+            break;
+        }
+        case audio::LocalInputMode::MIDI:   // midi track
+        {
+            int selectedDevice = inputTrack->getMidiInputProps().getDevice();
+            bool deviceIsValid = selectedDevice >= 0 &&
+                    selectedDevice < midiDriver->getMaxInputDevices() &&
+                    midiDriver->inputDeviceIsGloballyEnabled(selectedDevice);
+            if (!deviceIsValid) {
+                // try another available midi input device
+                int firstAvailableDevice = midiDriver->getFirstGloballyEnableInputDevice();
+                if (firstAvailableDevice >= 0) {
+                    audio::MidiInputProps midiInputProps;
+                    midiInputProps.setDevice(firstAvailableDevice);
+                    midiInputProps.setChannel(-1);  // select all channels
+                    setInputTrackToMIDI(trackIndex, midiInputProps);
+                } else {
+                    setInputTrackToNoInput(trackIndex);
                 }
             }
+            break;
+        }
+        default:
+            // nothing
+            break;
         }
     }
 }

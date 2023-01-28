@@ -224,17 +224,20 @@ void MainWindowStandalone::sanitizeSubchannelInputSelections(LocalTrackView *sub
 {
     int trackID = subChannelView->getInputIndex();
     if (subChannel.isMidi()) {
-        qint8 transpose = subChannel.getTranspose();
-        quint8 lowerNote = subChannel.getLowerMidiNote();
-        quint8 higherNote = subChannel.getHigherMidiNote();
-
+        audio::MidiInputProps midiInputProps;
+        midiInputProps.setTranspose(subChannel.getTranspose());
+        midiInputProps.setLowerNote(subChannel.getLowerMidiNote());
+        midiInputProps.setHigherNote(subChannel.getHigherMidiNote());
         if (midiDeviceIsValid(subChannel.getMidiDevice())) {
-            controller->setInputTrackToMIDI(trackID, subChannel.getMidiDevice(), subChannel.getMidiChannel(),
-                                            transpose, lowerNote, higherNote);
+            midiInputProps.setDevice(subChannel.getMidiDevice());
+            midiInputProps.setChannel(subChannel.getMidiChannel());
+            controller->setInputTrackToMIDI(trackID, midiInputProps);
         } else {
             if (controller->getMidiDriver()->hasInputDevices()) {
                 // use the first midi device and receiving from all channels
-                controller->setInputTrackToMIDI(trackID, 0, -1, transpose, lowerNote, higherNote);
+                midiInputProps.setDevice(0);
+                midiInputProps.setChannel(-1);
+                controller->setInputTrackToMIDI(trackID, midiInputProps);
             } else {
                 controller->setInputTrackToNoInput(trackID);
             }

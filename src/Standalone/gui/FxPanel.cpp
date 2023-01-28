@@ -16,7 +16,7 @@ FxPanel::FxPanel(LocalTrackViewStandalone *parent, MainControllerStandalone *mai
     mainLayout->setContentsMargins(QMargins(0, 0, 0, 0));
     mainLayout->setSpacing(1);
 
-    for (int i = 0; i < audio::AudioNode::MAX_PROCESSORS_PER_TRACK; i++) {
+    for (int i = 0; i < audio::LocalInputNode::MAX_PROCESSORS_PER_TRACK; i++) {
         auto item = new FxPanelItem(localTrackView, mainController);
         items.append(item);
         mainLayout->addWidget(item);
@@ -48,7 +48,7 @@ qint32 FxPanel::getPluginSlotIndex(const QSharedPointer<Plugin> &plugin) const
 
 void FxPanel::addPlugin(const QSharedPointer<Plugin> &plugin, quint32 pluginSlotIndex)
 {
-    assert(pluginSlotIndex < audio::AudioNode::MAX_PROCESSORS_PER_TRACK);
+    assert(pluginSlotIndex < audio::LocalInputNode::MAX_PROCESSORS_PER_TRACK);
     auto items = findChildren<FxPanelItem *>();
     if (pluginSlotIndex < (quint32)items.count()) {
         auto fxPanelItem = items.at(pluginSlotIndex);
@@ -61,8 +61,8 @@ void FxPanel::addPlugin(const QSharedPointer<Plugin> &plugin, quint32 pluginSlot
 
 void FxPanel::swapPlugins(quint32 firstSlotIndex, quint32 secondSlotIndex)
 {
-    assert(firstSlotIndex < audio::AudioNode::MAX_PROCESSORS_PER_TRACK);
-    assert(secondSlotIndex < audio::AudioNode::MAX_PROCESSORS_PER_TRACK);
+    assert(firstSlotIndex < audio::LocalInputNode::MAX_PROCESSORS_PER_TRACK);
+    assert(secondSlotIndex < audio::LocalInputNode::MAX_PROCESSORS_PER_TRACK);
     if (firstSlotIndex != secondSlotIndex) {
         auto items = findChildren<FxPanelItem *>();
         auto firstPanelItem = items.at(firstSlotIndex);

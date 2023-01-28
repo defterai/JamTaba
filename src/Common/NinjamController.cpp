@@ -569,9 +569,10 @@ void NinjamController::start(const ServerInfo &server)
         const auto& metronomeSettings = mainController->getSettings().metronomeSettings;
 
         mainController->addTrack(this->metronomeTrackNode);
-        mainController->setTrackMute(this->metronomeTrackNode->getID(), metronomeSettings.isMuted());
-        mainController->setTrackGain(this->metronomeTrackNode->getID(), metronomeSettings.getGain());
-        mainController->setTrackPan(this->metronomeTrackNode->getID(), metronomeSettings.getPan());
+
+        emit this->metronomeTrackNode->postMute(metronomeSettings.isMuted(), this);
+        emit this->metronomeTrackNode->postGain(Utils::linearGainToPower(metronomeSettings.getGain()), this);
+        emit this->metronomeTrackNode->postPan(metronomeSettings.getPan(), this);
 
         mainController->addTrack(this->midiSyncTrackNode);
 
@@ -715,14 +716,14 @@ void NinjamController::removeTrack(const User &user, const UserChannel &channel)
     }
 }
 
-int NinjamController::getMetronomeTrackId() const
+const QSharedPointer<audio::MetronomeTrackNode>& NinjamController::getMetronomeTrack() const
 {
-    return metronomeTrackNode->getID();
+    return metronomeTrackNode;
 }
 
-int NinjamController::getMidiSyncTrackId() const
+const QSharedPointer<audio::MidiSyncTrackNode>& NinjamController::getMidiSyncTrack() const
 {
-    return midiSyncTrackNode->getID();
+    return midiSyncTrackNode;
 }
 
 void NinjamController::voteBpi(int bpi)

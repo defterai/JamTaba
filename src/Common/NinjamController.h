@@ -46,8 +46,8 @@ public:
     void stop(bool emitDisconnectedSignal);
     bool isRunning() const;
 
-    int getMetronomeTrackId() const;
-    int getMidiSyncTrackId() const;
+    const QSharedPointer<MetronomeTrackNode>& getMetronomeTrack() const;
+    const QSharedPointer<MidiSyncTrackNode>& getMidiSyncTrack() const;
 
     void setMetronomeBeatsPerAccent(int beatsPerAccent, int currentBpi);
     void setMetronomeAccentBeats(QList<int> accentBeats);

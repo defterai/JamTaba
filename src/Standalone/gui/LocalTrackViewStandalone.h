@@ -3,6 +3,7 @@
 
 #include "gui/LocalTrackView.h"
 #include "audio/core/AudioDriver.h"
+#include "audio/core/LocalInputNode.h"
 #include "MainControllerStandalone.h"
 #include "MidiToolsDialog.h"
 
@@ -10,6 +11,11 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QSpacerItem>
+
+/*namespace audio {
+enum class LocalInputMode;
+class MidiInputProps;
+}*/
 
 class LocalTrackViewStandalone : public LocalTrackView
 {
@@ -20,7 +26,8 @@ class LocalTrackViewStandalone : public LocalTrackView
 
 public:
 
-    LocalTrackViewStandalone(controller::MainControllerStandalone* mainController, int channelID);
+    LocalTrackViewStandalone(controller::MainControllerStandalone* controller,
+                             const QSharedPointer<audio::LocalInputNode>& trackNode);
 
     void setPeakMetersOnlyMode(bool peakMetersOnly) override;
     void setActivatedStatus(bool unlighted) override;
@@ -81,6 +88,9 @@ private slots:
     void toggleMidiNoteLearn(bool);
 
     void useLearnedMidiNote(quint8 midiNote);
+    void inputModeChanged(audio::LocalInputMode inputMode, void* sender);
+    void audioInputPropsChanged(audio::LocalAudioInputProps audioInputProps, void* sender);
+    void midiInputPropsChanged(audio::MidiInputProps midiInputProps, void* sender);
 
 private:
     controller::MainControllerStandalone* controller; //a 'casted' pointer just for convenience
@@ -102,6 +112,10 @@ private:
     FxPanel *fxPanel;
 
     MidiActivityMeter *midiPeakMeter; // show midi activity
+
+    audio::LocalInputMode inputMode;
+    audio::LocalAudioInputProps audioInputProps;
+    audio::MidiInputProps midiInputProps;
 
     void setMidiPeakMeterVisibility(bool visible);
 

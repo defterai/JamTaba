@@ -27,13 +27,14 @@ private:
     int channelsCount;
 
 public:
-
-    ChannelRange(int firstChannel, int channelsCount);
     ChannelRange();
+    ChannelRange(int firstChannel, int channelsCount);
+    bool operator==(const ChannelRange&) const;
 
     int getChannels() const;
 
     bool isMono() const;
+    bool isStereo() const;
 
     void setToStereo();
     void setToMono();
@@ -67,6 +68,11 @@ inline int ChannelRange::getChannels() const
 inline bool ChannelRange::isMono() const
 {
     return channelsCount == 1;
+}
+
+inline bool ChannelRange::isStereo() const
+{
+    return channelsCount == 2;
 }
 
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

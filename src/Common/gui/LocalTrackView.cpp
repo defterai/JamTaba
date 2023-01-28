@@ -110,33 +110,22 @@ private:
 
 LocalTrackView::LooperIconFactory LocalTrackView::looperIconFactory(":/images/loop.png");
 
-LocalTrackView::LocalTrackView(controller::MainController *mainController, int channelIndex) :
-    BaseTrackView(mainController, channelIndex),
-    inputNode(nullptr),
+LocalTrackView::LocalTrackView(const QSharedPointer<audio::LocalInputNode>& inputNode) :
+    BaseTrackView(inputNode.staticCast<audio::AudioNode>()),
     buttonStereoInversion(createStereoInversionButton()),
     buttonLooper(createLooperButton()),
     peakMetersOnly(false)
 {
-    Q_ASSERT(mainController);
+    buttonStereoInversion->setChecked(inputNode->getAudioInputProps().isStereoInverted());
 
-    const auto& looperSettings = mainController->getSettings().looperSettings;
-    auto looper = QSharedPointer<audio::Looper>::create(looperSettings.getPreferredMode(),
-                                                        looperSettings.getPreferredLayersCount());
-    auto inputGroup = mainController->createInputTrackGroup(channelIndex);
-    this->inputNode = QSharedPointer<audio::LocalInputNode>::create(inputGroup, looper);
-    inputGroup->addInputNode(inputNode);
-
-    // insert a input node in controller
-    trackID = mainController->addInputTrackNode(this->inputNode);
     bindThisViewWithTrackNodeSignals();// now is secure bind this LocalTrackView with the respective TrackNode model
-
-    setInitialValues(1.0f, BaseTrackView::Boost::ZERO, 0.0f, false, false);
 
     setActivatedStatus(false);
 
     secondaryChildsLayout->addWidget(buttonLooper, 0, Qt::AlignCenter);
     secondaryChildsLayout->addWidget(buttonStereoInversion, 0, Qt::AlignCenter);
 
+    auto looper = inputNode->getLooper();
     connect(looper.data(), &audio::Looper::stateChanged, this, &LocalTrackView::updateLooperButtonIcon);
     connect(looper.data(), &audio::Looper::currentLayerChanged, this, &LocalTrackView::updateLooperButtonIcon);
 }
@@ -144,61 +133,42 @@ LocalTrackView::LocalTrackView(controller::MainController *mainController, int c
 void LocalTrackView::updateLooperButtonIcon()
 {
     // get a new icon based in looper state
-    auto looper = this->inputNode->getLooper();
-    QIcon newIcon = looperIconFactory.getIcon(looper.data(), buttonLooper->fontMetrics());
-    buttonLooper->setIcon(newIcon);
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        auto looper = inputNode->getLooper();
+        QIcon newIcon = looperIconFactory.getIcon(looper.data(), buttonLooper->fontMetrics());
+        buttonLooper->setIcon(newIcon);
+    }
 }
 
 void LocalTrackView::bindThisViewWithTrackNodeSignals()
 {
-    BaseTrackView::bindThisViewWithTrackNodeSignals(this->inputNode.data());
-
-    connect(this->inputNode.data(),
-            &audio::LocalInputNode::stereoInversionChanged, this, &LocalTrackView::setStereoInversion);
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        BaseTrackView::bindThisViewWithTrackNodeSignals(inputNode.data());
+        connect(inputNode.data(), &audio::LocalInputNode::stereoInversionChanged, this, &LocalTrackView::setStereoInversion);
+    }
 }
 
-void LocalTrackView::setInitialValues(float initialGain, BaseTrackView::Boost boostValue,
+void LocalTrackView::setInitialValues(float initialGain, int initialBoost,
                                       float initialPan, bool muted, bool stereoInverted)
 {
-    inputNode->setGain(initialGain);
-    inputNode->setPan(initialPan);
-    initializeBoostSpinBox(boostValue);
-    if (muted)
-        inputNode->setMute(muted);
-
-    setStereoInversion(stereoInverted);
-}
-
-void LocalTrackView::detachMainController()
-{
-    this->mainController = nullptr;
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        emit inputNode->postGain(Utils::linearGainToPower(initialGain), nullptr);
+        emit inputNode->postPan(initialPan, nullptr);
+        emit inputNode->postBoost(Utils::dbToLinear(initialBoost), nullptr);
+        emit inputNode->postMute(muted, nullptr);
+        setStereoInversion(stereoInverted);
+    }
 }
 
 void LocalTrackView::closeAllPlugins()
 {
-    inputNode->closeProcessorsWindows(); // close vst editors
-}
-
-void LocalTrackView::mute(bool b)
-{
-    getInputNode()->setMute(b); // audio only
-    muteButton->setChecked(b); // gui only
-}
-
-void LocalTrackView::solo(bool b)
-{
-    getInputNode()->setSolo(b); // audio only
-    soloButton->setChecked(b); // gui only
-}
-
-void LocalTrackView::initializeBoostSpinBox(Boost boostValue)
-{
-    if (boostValue == Boost::PLUS)
-        boostSpinBox->setToMax();
-    else if (boostValue == Boost::MINUS)
-        boostSpinBox->setToMin();
-    else
-        boostSpinBox->setToOff(); // 0 dB - OFF
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        inputNode->closeProcessorsWindows(); // close vst editors
+    }
 }
 
 QSize LocalTrackView::sizeHint() const
@@ -269,20 +239,30 @@ void LocalTrackView::setActivatedStatus(bool unlighted)
     update();
 }
 
+int LocalTrackView::getInputIndex() const
+{
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        return inputNode->getID();
+    }
+    return -1;
+}
+
 QSharedPointer<audio::LocalInputNode> LocalTrackView::getInputNode() const
 {
-    return this->inputNode;
+    return this->trackNode.lock().staticCast<audio::LocalInputNode>();
 }
 
 void LocalTrackView::reset()
 {
-    mainController->resetTrack(getTrackID());
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        inputNode->reset();
+    }
 }
 
 LocalTrackView::~LocalTrackView()
 {
-    if (mainController)
-        mainController->removeInputTrackNode(getTrackID());
 }
 
 void LocalTrackView::setTintColor(const QColor &color)
@@ -301,7 +281,10 @@ QPushButton *LocalTrackView::createLooperButton()
     button->setEnabled(false); // disabled by default
 
     connect(button, &QPushButton::clicked, [=]{
-        emit openLooperEditor(this->trackID);
+        auto inputNode = getInputNode();
+        if (inputNode) {
+            emit openLooperEditor(inputNode->getID());
+        }
     });
 
     return button;
@@ -332,8 +315,22 @@ void LocalTrackView::translateUI()
 
 void LocalTrackView::setStereoInversion(bool stereoInverted)
 {
-    mainController->setTrackStereoInversion(getInputIndex(), stereoInverted);
-    buttonStereoInversion->setChecked(stereoInverted);
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        inputNode->postSetStereoInversion(stereoInverted, this);
+        buttonStereoInversion->setChecked(stereoInverted);
+    }
+}
+
+void LocalTrackView::updateGuiElements()
+{
+    BaseTrackView::updateGuiElements();
+    auto trackNode = getInputNode();
+    if (trackNode) {
+        // update the track processors. In this moment the VST plugins GUI are updated.
+        // Some plugins need this to run your animations (see Ez Drummer, for example);
+        trackNode->updateProcessorsGui();  // call idle in VST plugins
+    }
 }
 
 void LocalTrackView::updateStyleSheet()

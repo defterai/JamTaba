@@ -19,19 +19,18 @@ class LocalTrackView : public BaseTrackView
     Q_OBJECT
 
 public:
-    LocalTrackView(controller::MainController *mainController, int channelIndex);
+    explicit LocalTrackView(const QSharedPointer<audio::LocalInputNode>& trackNode);
 
-    void setInitialValues(float initialGain, BaseTrackView::Boost boostValue, float initialPan, bool muted, bool stereoInverted);
+    void setInitialValues(float initialGain, int initialBoost, float initialPan, bool muted, bool stereoInverted);
 
     virtual ~LocalTrackView();
+    virtual void updateGuiElements() override;
 
     void enableLopperButton(bool enabled);
 
     void updateStyleSheet() override;
 
     void closeAllPlugins();
-
-    void detachMainController();
 
     int getInputIndex() const;
 
@@ -48,19 +47,14 @@ public:
 
     virtual void reset();
 
-    void mute(bool b);
-    void solo(bool b);
-    void initializeBoostSpinBox(Boost boostValue);
-
     void setTintColor(const QColor &color) override;
 
 signals:
-    void openLooperEditor(uint trackIndex);
+    void openLooperEditor(int trackIndex);
 
 protected:
     QPushButton *buttonStereoInversion;
     QPushButton *buttonLooper;
-    QSharedPointer<audio::LocalInputNode> inputNode;
 
     bool peakMetersOnly;
 
@@ -91,11 +85,6 @@ private slots:
 inline bool LocalTrackView::isShowingPeakMetersOnly() const
 {
     return peakMetersOnly;
-}
-
-inline int LocalTrackView::getInputIndex() const
-{
-    return getTrackID();
 }
 
 #endif

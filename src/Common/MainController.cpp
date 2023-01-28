@@ -50,7 +50,7 @@ MainController::MainController(const Settings &settings) :
     currentStreamingRoomID(-1000),
     started(false),
     masterGain(1),
-    usersDataCache(Configurator::getInstance()->getCacheDir()),
+    usersDataCache(QSharedPointer<UsersDataCache>::create(Configurator::getInstance()->getCacheDir())),
     lastFrameTimeStamp(0),
     emojiManager(":/emoji/emoji.json", ":/emoji/icons")
 {
@@ -507,22 +507,27 @@ void MainController::removeAllInputTracks()
 
 void MainController::removeInputTrackNode(int inputTrackIndex)
 {
-    QMutexLocker locker(&mutex);
-
-    if (inputTracks.contains(inputTrackIndex)) {
-        // remove from group
-        auto inputTrack = inputTracks[inputTrackIndex];
-        int trackGroupIndex = inputTrack->getChannelGroupIndex();
-        auto it = trackGroups.find(trackGroupIndex);
-        if (it != trackGroups.end()) {
-            it.value()->removeInput(inputTrack);
-            if (it.value()->isEmpty()) {
-                trackGroups.erase(it);
+    QSharedPointer<audio::LocalInputNode> inputTrack;
+    {
+        QMutexLocker locker(&mutex);
+        if (inputTracks.contains(inputTrackIndex)) {
+            // remove from group
+            inputTrack = inputTracks[inputTrackIndex];
+            int trackGroupIndex = inputTrack->getChannelGroupIndex();
+            auto it = trackGroups.find(trackGroupIndex);
+            if (it != trackGroups.end()) {
+                it.value()->removeInput(inputTrack);
+                if (it.value()->isEmpty()) {
+                    trackGroups.erase(it);
+                }
             }
-        }
 
-        inputTracks.remove(inputTrackIndex);
-        removeTrack(inputTrackIndex);
+            inputTracks.remove(inputTrackIndex);
+            removeTrack(inputTrackIndex);
+        }
+    }
+    if (inputTrack) {
+        inputTrack->suspendProcessors();
     }
 }
 
@@ -535,6 +540,21 @@ QSharedPointer<audio::LocalInputGroup> MainController::createInputTrackGroup(int
     auto group = QSharedPointer<audio::LocalInputGroup>::create(trackGroupIndex);
     trackGroups.insert(trackGroupIndex, group);
     return group;
+}
+
+QSharedPointer<audio::LocalInputNode> MainController::createLocalInputNode(int trackID)
+{
+    auto looper = QSharedPointer<audio::Looper>::create(settings.looperSettings.getPreferredMode(),
+                                                        settings.looperSettings.getPreferredLayersCount());
+    auto inputGroup = createInputTrackGroup(trackID);
+    auto inputNode = QSharedPointer<audio::LocalInputNode>::create(inputGroup, looper);
+    inputGroup->addInputNode(inputNode);
+    inputNode->setGain(1.0f);
+    inputNode->setPan(0.0f);
+    inputNode->setBoost(0.0f);
+    inputNode->setMute(false);
+    addInputTrackNode(inputNode);
+    return inputNode;
 }
 
 int MainController::addInputTrackNode(QSharedPointer<audio::LocalInputNode> inputTrackNode)
@@ -716,7 +736,6 @@ void MainController::removeTrack(long trackID)
     }
     if (trackNode) {
         audioMixer.removeNode(trackNode);
-        trackNode->suspendProcessors();
     }
 }
 
@@ -825,101 +844,9 @@ bool MainController::isTransmiting(int channelID) const
     return false;
 }
 
-void MainController::setTrackPan(int trackID, float pan, bool blockSignals)
-{
-    auto node = getTrackNode(trackID);
-    if (node) {
-        node->blockSignals(blockSignals);
-        node->setPan(pan);
-        node->blockSignals(false);
-    }
-}
-
-void MainController::setTrackBoost(int trackID, float boostInDecibels)
-{
-    auto node = getTrackNode(trackID);
-    if (node)
-        node->setBoost(Utils::dbToLinear(boostInDecibels));
-}
-
-void MainController::resetTrack(int trackID)
-{
-    auto node = getTrackNode(trackID);
-    if (node)
-        node->reset();
-}
-
-void MainController::setTrackGain(int trackID, float gain, bool blockSignals)
-{
-    auto node = getTrackNode(trackID);
-    if (node) {
-        node->blockSignals(blockSignals);
-        node->setGain(Utils::linearGainToPower(gain));
-        node->blockSignals(false);
-    }
-}
-
 void MainController::setMasterGain(float newGain)
 {
     this->masterGain = Utils::linearGainToPower(newGain);
-}
-
-void MainController::setTrackMute(int trackID, bool muteStatus, bool blockSignals)
-{
-    auto node = getTrackNode(trackID);
-    if (node) {
-        node->blockSignals(blockSignals);
-        node->setMute(muteStatus);
-        node->blockSignals(false); // unblock signals by default
-    }
-}
-
-void MainController::setTrackSolo(int trackID, bool soloStatus, bool blockSignals)
-{
-    auto node = getTrackNode(trackID);
-    if (node) {
-        node->blockSignals(blockSignals);
-        node->setSolo(soloStatus);
-        node->blockSignals(false);
-    }
-}
-
-bool MainController::trackIsMuted(int trackID) const
-{
-    auto node = getTrackNode(trackID);
-
-    if (node)
-        return node->isMuted();
-
-    return false;
-}
-
-bool MainController::trackIsSoloed(int trackID) const
-{
-    auto node = getTrackNode(trackID);
-
-    if (node)
-        return node->isSoloed();
-
-    return false;
-}
-
-void MainController::setTrackStereoInversion(int trackID, bool stereoInverted)
-{
-    auto inputTrackNode = inputTracks[trackID];
-
-    if (inputTrackNode)
-        inputTrackNode->setStereoInversion(stereoInverted);
-}
-
-bool MainController::trackStereoIsInverted(int trackID) const
-{
-    auto inputTrackNode = inputTracks[trackID];
-
-    if (inputTrackNode)
-        return inputTrackNode->isStereoInverted();
-
-    return false;
 }
 
 // +++++++++++++++++++++++++++++++++

@@ -157,18 +157,6 @@ public:
 
     static QStringList getBotNames();
 
-    // tracks
-    void setTrackMute(int trackID, bool muteStatus, bool blockSignals = false);
-    bool trackIsMuted(int trackID) const;
-    void setTrackSolo(int trackID, bool soloStatus, bool blockSignals = false);
-    bool trackIsSoloed(int trackID) const;
-    void setTrackGain(int trackID, float gain, bool blockSignals = false);
-    void setTrackBoost(int trackID, float boostInDecibels);
-    void setTrackPan(int trackID, float pan, bool blockSignals = false);
-    void resetTrack(int trackID);     // reset mute, solo, gain, pan, etc
-    void setTrackStereoInversion(int trackID, bool stereoInverted);
-    bool trackStereoIsInverted(int trackID) const;
-
     AudioPeak getRoomStreamPeak();
     AudioPeak getTrackPeak(int trackID);
     AudioPeak getMasterPeak();
@@ -184,6 +172,8 @@ public:
     login::Location getGeoLocation(const QString &ip);
 
     QSharedPointer<audio::LocalInputGroup> createInputTrackGroup(int trackGroupIndex);
+
+    QSharedPointer<audio::LocalInputNode> createLocalInputNode(int trackID);
 
     QSharedPointer<LocalInputNode> getInputTrack(int localInputIndex);
     virtual int addInputTrackNode(QSharedPointer<LocalInputNode> inputTrackNode);
@@ -266,7 +256,7 @@ public:
     virtual QString getUserEnvironmentString() const;
 
     // to remembering ninjamers controls (pan, level, gain, boost)
-    UsersDataCache *getUsersDataCache();     // TODO hide this from callers. Create a function in mainController to update the CacheEntries, so MainController is used as a Façade.
+    QSharedPointer<UsersDataCache> getUsersDataCache();     // TODO hide this from callers. Create a function in mainController to update the CacheEntries, so MainController is used as a Façade.
 
     bool userIsBlockedInChat(const QString &userName) const;
 
@@ -406,7 +396,7 @@ private:
     float masterGain;
     AudioPeak masterPeak;
 
-    UsersDataCache usersDataCache;
+    QSharedPointer<UsersDataCache> usersDataCache;
 
     const static quint8 CAMERA_FPS;
 
@@ -488,9 +478,9 @@ inline EmojiManager *MainController::getEmojiManager() const
     return const_cast<EmojiManager *>(&emojiManager);
 }
 
-inline UsersDataCache *MainController::getUsersDataCache()
+inline QSharedPointer<UsersDataCache> MainController::getUsersDataCache()
 {
-    return &usersDataCache;
+    return usersDataCache;
 }
 
 inline bool MainController::userNameWasChoosed() const

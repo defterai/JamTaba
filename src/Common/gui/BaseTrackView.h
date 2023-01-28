@@ -20,8 +20,8 @@ class QBoxLayout;
 class QGridLayout;
 class BoostSpinBox;
 
-namespace controller {
-class MainController;
+namespace audio {
+class AudioNode;
 }
 
 class BaseTrackView : public QFrame
@@ -29,28 +29,12 @@ class BaseTrackView : public QFrame
     Q_OBJECT
 
 public:
-    BaseTrackView(controller::MainController *mainController, long trackID);
+    explicit BaseTrackView(const QSharedPointer<audio::AudioNode>& trackNode);
     virtual ~BaseTrackView();
 
     enum Boost {
         ZERO, MINUS, PLUS
     };
-
-    static Boost intToBoostValue(int intValue)
-    {
-        if (intValue == 0)
-            return Boost::ZERO;
-        if (intValue > 0)
-            return Boost::PLUS;
-        return Boost::MINUS;
-    }
-
-    inline long getTrackID() const
-    {
-        return trackID;
-    }
-
-    static BaseTrackView *getTrackViewByID(long trackID);
 
     virtual void setToNarrow();
     virtual void setToWide();
@@ -62,9 +46,9 @@ public:
 
     virtual void updateGuiElements();
 
-    controller::MainController *getMainController() const;
-
     virtual void setActivatedStatus(bool deactivated);
+
+    int getTrackID() const;
 
     bool isActivated() const;
 
@@ -76,13 +60,11 @@ public:
 
 protected:
 
-    controller::MainController *mainController;
-
     void changeEvent(QEvent *e) override;
 
     virtual void translateUI();
 
-    long trackID;
+    QWeakPointer<audio::AudioNode> trackNode;
 
     bool activated;
     bool narrowed;
@@ -124,33 +106,28 @@ protected:
     QColor tintColor;
 
 private:
-    static QMap<long, BaseTrackView *> trackViews;
     audio::AudioPeak maxPeak;
 
 protected slots:
-    virtual void toggleMuteStatus();
-    virtual void toggleSoloStatus();
+    virtual void toggleMuteStatus(bool enabled);
+    virtual void toggleSoloStatus(bool enabled);
     virtual void setGain(int value);
     virtual void setPan(int value);
     virtual void updateBoostValue(int boostValue);
+    virtual void updateAudioPeak(const audio::AudioPeak& audioPeak);
 
 private slots:
     // signals emitted by AudioNode class when user activate the control with mouse, or midi CCs, or using joystick, etc.
-    void setPanKnobPosition(float newPanValue);
-    void setGainSliderPosition(float newGainValue);
+    void setPanKnobPosition(float newPanValue, void* sender = nullptr);
+    void setGainSliderPosition(float newGainValue, void* sender = nullptr);
     void setMuteStatus(bool newMuteStatus);
     void setSoloStatus(bool newSoloStatus);
-    void setBoostStatus(float newBoostValue);
+    void setBoostStatus(float newBoostValue, void* sender = nullptr);
 };
 
 inline QColor BaseTrackView::getTintColor() const
 {
     return tintColor;
-}
-
-inline controller::MainController* BaseTrackView::getMainController() const
-{
-    return mainController;
 }
 
 #endif // TRACKVIEW_H

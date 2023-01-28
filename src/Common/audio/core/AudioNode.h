@@ -23,31 +23,24 @@ public:
 
     virtual void processReplacing(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, std::vector<midi::MidiMessage> &midiBuffer);
 
-    virtual void setMute(bool muted);
+    virtual void setMute(bool muted, void* sender = nullptr);
 
-    void setSolo(bool soloed);
+    void setSolo(bool soloed, void* sender = nullptr);
 
     int getID() const;
     bool isMuted() const;
     bool isSoloed() const;
 
     virtual bool connect(AudioNode &other);
-    virtual bool disconnect(AudioNode &otherNode);
+    virtual bool disconnect(AudioNode &other);
 
-    virtual void addProcessor(const QSharedPointer<AudioNodeProcessor> &newProcessor, quint32 slotIndex);
-    void swapProcessors(quint32 firstSlotIndex, quint32 secondSlotIndex);
-    void removeProcessor(const QSharedPointer<AudioNodeProcessor> &processor);
-    void suspendProcessors();
-    void resumeProcessors();
-    virtual void updateProcessorsGui();
-
-    void setGain(float gainValue);
-    void setBoost(float boostValue);
+    void setGain(float gainValue, void* sender = nullptr);
+    void setBoost(float boostValue, void* sender = nullptr);
 
     float getBoost() const;
     float getGain() const;
 
-    void setPan(float pan);
+    void setPan(float pan, void* sender = nullptr);
     float getPan() const;
 
     AudioPeak getLastPeak() const;
@@ -63,23 +56,20 @@ public:
     virtual bool isActivated() const;
 
     virtual void reset(); // reset pan, gain, boost, etc
-
-    static const quint8 MAX_PROCESSORS_PER_TRACK = 4;
-
 protected:
 
+    inline virtual void pluginsProcess(audio::SamplesBuffer &out, std::vector<midi::MidiMessage> &midiBuffer) { Q_UNUSED(out) Q_UNUSED(midiBuffer) }
     inline virtual void preFaderProcess(audio::SamplesBuffer &out){ Q_UNUSED(out) } // called after process all input and plugins, and just before compute gain, pan and boost.
     inline virtual void postFaderProcess(audio::SamplesBuffer &out){ Q_UNUSED(out) } // called after compute gain, pan and boost.
 
     int getInputResamplingLength(int sourceSampleRate, int targetSampleRate, int outFrameLenght);
 
     QSet<AudioNode *> connections;
-    QSharedPointer<AudioNodeProcessor> processors[MAX_PROCESSORS_PER_TRACK];
     SamplesBuffer internalInputBuffer;
     SamplesBuffer internalOutputBuffer;
 
     mutable audio::AudioPeak lastPeak;
-    QMutex mutex; // used to protected connections manipulation because nodes can be added or removed by different threads
+    mutable QMutex mutex; // used to protected connections manipulation because nodes can be added or removed by different threads
 
     // pan
     float pan;
@@ -108,11 +98,18 @@ private:
     void updateGains();
 
 signals:
-    void gainChanged(float newGain);
-    void panChanged(float newPan);
-    void boostChanged(float newBoost);
-    void muteChanged(bool muteStatus);
-    void soloChanged(bool soloStatus);
+    void gainChanged(float newGain, void* sender);
+    void panChanged(float newPan, void* sender);
+    void boostChanged(float newBoost, void* sender);
+    void muteChanged(bool muteStatus, void* sender);
+    void soloChanged(bool soloStatus, void* sender);
+    void audioPeakChanged(audio::AudioPeak audioPeak);
+
+    void postGain(float newGain, void* sender);
+    void postPan(float newPan, void* sender);
+    void postBoost(float newBoost, void* sender);
+    void postMute(bool muteStatus, void* sender);
+    void postSolo(bool soloStatus, void* sender);
 };
 
 

@@ -363,36 +363,35 @@ void NinjamRoomWindow::setMetronomePanSliderPosition(int value)
     if (!metronomePanel)
         return;
 
-    int metronomeTrackId = mainController->getNinjamController()->getMetronomeTrackId();
-    if (!metronomeTrackId)
-        return;
-
-    float sliderValue = value/(float)metronomePanel->getPanSliderMaximumValue();
-    mainController->setTrackPan(metronomeTrackId, sliderValue);
+    auto metronomeTrack = mainController->getNinjamController()->getMetronomeTrack();
+    if (metronomeTrack) {
+        float sliderValue = value/ (float)metronomePanel->getPanSliderMaximumValue();
+        metronomeTrack->postPan(sliderValue, this);
+    }
 }
 
 void NinjamRoomWindow::setMetronomeFaderPosition(int value)
 {
-    int metronomeTrackId = mainController->getNinjamController()->getMetronomeTrackId();
-    if (!metronomeTrackId)
-        return;
-    mainController->setTrackGain(metronomeTrackId, value/100.0);
+    auto metronomeTrack = mainController->getNinjamController()->getMetronomeTrack();
+    if (metronomeTrack) {
+        metronomeTrack->postGain(Utils::linearGainToPower(value / 100.0), this);
+    }
 }
 
-void NinjamRoomWindow::toggleMetronomeMuteStatus()
+void NinjamRoomWindow::toggleMetronomeMuteStatus(bool enabled)
 {
-    int metronomeTrackId = mainController->getNinjamController()->getMetronomeTrackId();
-    if (!metronomeTrackId)
-        return;
-    mainController->setTrackMute(metronomeTrackId, !mainController->trackIsMuted(metronomeTrackId));
+    auto metronomeTrack = mainController->getNinjamController()->getMetronomeTrack();
+    if (metronomeTrack) {
+        metronomeTrack->postMute(enabled, this);
+    }
 }
 
-void NinjamRoomWindow::toggleMetronomeSoloStatus()
+void NinjamRoomWindow::toggleMetronomeSoloStatus(bool enabled)
 {
-    int metronomeTrackId = mainController->getNinjamController()->getMetronomeTrackId();
-    if (!metronomeTrackId)
-        return;
-    mainController->setTrackSolo(metronomeTrackId, !mainController->trackIsSoloed(metronomeTrackId));
+    auto metronomeTrack = mainController->getNinjamController()->getMetronomeTrack();
+    if (metronomeTrack) {
+        metronomeTrack->postSolo(enabled, this);
+    }
 }
 
 void NinjamRoomWindow::resetBpiComboBox()
@@ -419,16 +418,14 @@ void NinjamRoomWindow::updatePeaks()
     if (!metronomePanel)
         return;
 
-    int metronomeTrackId = mainController->getNinjamController()->getMetronomeTrackId();
-    if (!metronomeTrackId)
-        return;
-
-    auto metronomePeak = mainController->getTrackPeak(metronomeTrackId);
-
-    metronomePanel->setMetronomePeaks(metronomePeak.getLeftPeak(),
-                                   metronomePeak.getRightPeak(),
-                                   metronomePeak.getLeftRMS(),
-                                   metronomePeak.getRightRMS());
+    auto metronomeTrack = mainController->getNinjamController()->getMetronomeTrack();
+    if (metronomeTrack) {
+        auto metronomePeak = mainController->getTrackPeak(metronomeTrack->getID());
+        metronomePanel->setMetronomePeaks(metronomePeak.getLeftPeak(),
+                                       metronomePeak.getRightPeak(),
+                                       metronomePeak.getLeftRMS(),
+                                       metronomePeak.getRightRMS());
+    }
 }
 
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -464,12 +461,15 @@ void NinjamRoomWindow::removeChannel(const User &user, const UserChannel &channe
     if (group) {
         if (group->getTracksCount() == 1) { // removing the last track, the group is removed too
             trackGroups.remove(user.getFullName());
+            trackIndex.remove(group->getTrack<NinjamTrackView>(0)->getTrackID());
             ui->tracksPanel->layout()->removeWidget(group);
             group->deleteLater();
         } else { // remove one subchannel
-            auto trackView = BaseTrackView::getTrackViewByID(channelID);
-            if (trackView)
-                group->removeTrackView(trackView);
+            auto it = trackIndex.find(channelID);
+            if (it != trackIndex.end()) {
+                group->removeTrackView(it.value());
+                trackIndex.erase(it);
+            }
         }
 
         qCDebug(jtNinjamGUI) << "channel removed:" << channel.getName();
@@ -482,7 +482,8 @@ void NinjamRoomWindow::removeChannel(const User &user, const UserChannel &channe
 
 NinjamTrackView *NinjamRoomWindow::getTrackViewByID(long trackID)
 {
-    return dynamic_cast<NinjamTrackView *>(NinjamTrackView::getTrackViewByID(trackID));
+    auto it = trackIndex.find(trackID);
+    return it != trackIndex.end() ? it.value() : nullptr;
 }
 
 void NinjamRoomWindow::changeChannel(const User &, const UserChannel &channel, long channelID)
@@ -619,6 +620,7 @@ void NinjamRoomWindow::addChannel(const User &user, const UserChannel &channel, 
             auto *lastTrack = groupView->getTrack<NinjamTrackView>(trackCount - 1);
             if (lastTrack != nullptr) {
                 lastTrack->setNinjamChannelData(user.getFullName(), channel.getIndex());
+                trackIndex.insert(channelID, lastTrack);
             }
         }
     }
