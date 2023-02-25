@@ -9,12 +9,12 @@
 #include <type_traits>
 
 template<class T, class... Args>
-std::enable_if_t<!std::is_base_of_v<QObject, T>, QSharedPointer<T>> createQSharedPointer(Args&&... arguments) {
+std::enable_if_t<!std::is_base_of<QObject, T>::value, QSharedPointer<T>> createQSharedPointer(Args&&... arguments) {
     return QSharedPointer<T>::create(std::forward<Args>(arguments)...);
 }
 
 template<class T, class... Args>
-std::enable_if_t<std::is_base_of_v<QObject, T>, QSharedPointer<T>> createQSharedPointer(Args&&... arguments) {
+std::enable_if_t<std::is_base_of<QObject, T>::value, QSharedPointer<T>> createQSharedPointer(Args&&... arguments) {
     return QSharedPointer<T>(new T(std::forward<Args>(arguments)...), &T::deleteLater);
 }
 
