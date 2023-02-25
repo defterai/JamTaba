@@ -106,11 +106,12 @@ void MainWindowPlugin::initializeLocalSubChannel(LocalTrackView *subChannelView,
     MainWindow::initializeLocalSubChannel(subChannelView, subChannel);
 
     // VST plugin always use stereo audio input. We need ensure this when loading presets.
-    auto inputTrackNode = mainController->getInputTrack(subChannelView->getInputIndex());
+    auto inputTrackNode = subChannelView->getTrack<audio::LocalInputNode>();
     if (inputTrackNode) {
         int channelIndex = !firstChannelIsInitialized ?  0 : 1;
         int firstInputIndex = channelIndex * 2; // using inputs 0 & 1 for the 1st channel and inputs 2 & 3 for the 2nd channel. Vst allow up to 2 channels and no subchannels.
-        inputTrackNode->setAudioInputSelection(firstInputIndex, 2);//stereo
+        emit inputTrackNode->postSetAudioInputProps(audio::LocalAudioInputProps(firstInputIndex, 2), this); //stereo
+        emit inputTrackNode->postSetInputMode(audio::LocalInputMode::AUDIO, this),
         firstChannelIsInitialized = true;
     }
 }

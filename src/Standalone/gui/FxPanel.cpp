@@ -2,6 +2,7 @@
 #include "FxPanelItem.h"
 #include "LocalTrackViewStandalone.h"
 #include "audio/core/Plugins.h"
+#include "audio/core/AudioNode.h"
 
 #include <QVBoxLayout>
 #include <QPainter>
@@ -15,7 +16,7 @@ FxPanel::FxPanel(LocalTrackViewStandalone *parent, MainControllerStandalone *mai
     mainLayout->setContentsMargins(QMargins(0, 0, 0, 0));
     mainLayout->setSpacing(1);
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < audio::LocalInputNode::MAX_PROCESSORS_PER_TRACK; i++) {
         auto item = new FxPanelItem(localTrackView, mainController);
         items.append(item);
         mainLayout->addWidget(item);
@@ -25,26 +26,29 @@ FxPanel::FxPanel(LocalTrackViewStandalone *parent, MainControllerStandalone *mai
 void FxPanel::removePlugins()
 {
     auto items = findChildren<FxPanelItem *>();
-    for (auto item : items) {
-        if (item->containPlugin())
-            item->unsetPlugin();
+    for (auto item : qAsConst(items)) {
+        if (item->containPlugin()) {
+            item->removePlugin();
+        }
     }
 }
 
-qint32 FxPanel::getPluginFreeSlotIndex() const
+qint32 FxPanel::getPluginSlotIndex(const QSharedPointer<Plugin> &plugin) const
 {
     auto items = findChildren<FxPanelItem *>();
     int slotIndex = 0;
-    for (auto item : items) {
-        if (!item->containPlugin())
+    for (auto item : qAsConst(items)) {
+        if (item->getAudioPlugin() == plugin) {
             return slotIndex;
+        }
         slotIndex++;
     }
-    return -1; // no free slot
+    return -1; // not found
 }
 
 void FxPanel::addPlugin(const QSharedPointer<Plugin> &plugin, quint32 pluginSlotIndex)
 {
+    assert(pluginSlotIndex < audio::LocalInputNode::MAX_PROCESSORS_PER_TRACK);
     auto items = findChildren<FxPanelItem *>();
     if (pluginSlotIndex < (quint32)items.count()) {
         auto fxPanelItem = items.at(pluginSlotIndex);
@@ -52,6 +56,25 @@ void FxPanel::addPlugin(const QSharedPointer<Plugin> &plugin, quint32 pluginSlot
             fxPanelItem->setPlugin(plugin);
         else
             qCritical() << "Can't add " << plugin->getName() << " in slot index " << pluginSlotIndex;
+    }
+}
+
+void FxPanel::swapPlugins(quint32 firstSlotIndex, quint32 secondSlotIndex)
+{
+    assert(firstSlotIndex < audio::LocalInputNode::MAX_PROCESSORS_PER_TRACK);
+    assert(secondSlotIndex < audio::LocalInputNode::MAX_PROCESSORS_PER_TRACK);
+    if (firstSlotIndex != secondSlotIndex) {
+        auto items = findChildren<FxPanelItem *>();
+        auto firstPanelItem = items.at(firstSlotIndex);
+        auto secondPanelItem = items.at(secondSlotIndex);
+        auto firstPlugin = firstPanelItem->detachPlugin();
+        auto secondPlugin = secondPanelItem->detachPlugin();
+        if (firstPlugin) {
+            secondPanelItem->attachPlugin(firstPlugin);
+        }
+        if (secondPlugin) {
+            firstPanelItem->attachPlugin(secondPlugin);
+        }
     }
 }
 

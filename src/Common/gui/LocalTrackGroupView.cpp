@@ -9,6 +9,7 @@
 #include "widgets/InstrumentsMenu.h"
 #include "gui/GuiUtils.h"
 #include "audio/core/LocalInputNode.h"
+#include "audio/core/LocalInputGroup.h"
 #include "ninjam/client/Types.h"
 
 #include <QInputDialog>
@@ -18,18 +19,18 @@
 
 LocalTrackGroupView::LocalTrackGroupView(int channelIndex, MainWindow *mainWindow) :
     TrackGroupView(mainWindow),
-    index(channelIndex),
     mainWindow(mainWindow),
-    peakMeterOnly(false),
-    videoChannel(false),
     preparingToTransmit(false),
-    usingSmallSpacingInLayouts(false)
+    usingSmallSpacingInLayouts(false),
+    index(channelIndex),
+    peakMeterOnly(false),
+    videoChannel(false)
 {
     instrumentsButton = createInstrumentsButton();
     topPanelLayout->addWidget(instrumentsButton, 1, Qt::AlignCenter);
 
     connect(instrumentsButton, &InstrumentsButton::iconChanged, this, &LocalTrackGroupView::instrumentIconChanged);
-
+    connect(instrumentsButton, &InstrumentsButton::iconChanged, this, &LocalTrackGroupView::storeChannelInstrumentIndex);
 
     toolButton = createToolButton();
     voiceChatButton = createVoiceChatButton();
@@ -71,7 +72,10 @@ void LocalTrackGroupView::setAsVideoChannel()
 
     visitTracks<LocalTrackView>([&](LocalTrackView *track) {
         track->setVisible(false);
-        track->getInputNode()->setToNoInput();
+        auto inputTrack = track->getInputNode();
+        if (inputTrack) {
+            emit inputTrack->postSetInputMode(audio::LocalInputMode::DISABLED, this);
+        }
     });
 
     toolButton->setVisible(false);
@@ -173,7 +177,7 @@ QPushButton *LocalTrackGroupView::createToolButton()
 {
     QPushButton *toolButton = new QPushButton();
     toolButton->setObjectName(QStringLiteral("toolButton"));
-    toolButton->setText(QStringLiteral(""));
+    toolButton->setText("");
     toolButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 
     return toolButton;
@@ -194,6 +198,13 @@ void LocalTrackGroupView::addChannel()
 void LocalTrackGroupView::setInstrumentIcon(int instrumentIndex)
 {
     instrumentsButton->setInstrumentIcon(instrumentIndex);
+    storeChannelInstrumentIndex(instrumentIndex);
+}
+
+void LocalTrackGroupView::storeChannelInstrumentIndex(int instrumentIndex)
+{
+    auto mainController = mainWindow->getMainController();
+    mainController->storeChannelInstrumentIndex(index, instrumentIndex);
 }
 
 int LocalTrackGroupView::getInstrumentIcon() const
@@ -221,7 +232,7 @@ QMenu *LocalTrackGroupView::createPresetsDeletingSubMenu()
 
     // adding a menu action for each stored preset
     QStringList presetsNames = Configurator::getInstance()->getPresetFilesNames(false);
-    for (const QString &name : presetsNames) {
+    for (const QString &name : qAsConst(presetsNames)) {
         QString stripedName = getStripedPresetName(name);
         QAction *deleteAction = deleteMenu->addAction(stripedName);
         deleteAction->setData(name); // putting the preset name (including .json suffix) in the Action instance we can get this preset name inside slot 'loadPreset'
@@ -242,7 +253,7 @@ QMenu *LocalTrackGroupView::createPresetsLoadingSubMenu()
 
     // adding a menu action for each stored preset
     QStringList presetsNames = Configurator::getInstance()->getPresetFilesNames(false);
-    for (const QString &name : presetsNames) {
+    for (const QString &name : qAsConst(presetsNames)) {
         QString stripedName = getStripedPresetName(name);
         QAction *loadAction = loadMenu->addAction(stripedName);
         loadAction->setData(name); // putting the preset name (including .json suffix) in the Action instance we can get this preset name inside slot 'loadPreset'
@@ -320,8 +331,9 @@ void LocalTrackGroupView::addSubChannel()
 int LocalTrackGroupView::getSubchannelInternalIndex(uint subchannelTrackID) const
 {
     for (int i = 0; i < trackViews.count(); ++i) {
-        if (static_cast<uint>(trackViews.at(i)->getTrackID()) == subchannelTrackID)
+        if (trackViews.at(i)->getTrackID() == subchannelTrackID) {
             return i;
+        }
     }
 
     return -1;
@@ -346,13 +358,14 @@ LocalTrackView *LocalTrackGroupView::addTrackView(long trackID)
 
 LocalTrackView *LocalTrackGroupView::createTrackView(long trackID)
 {
-    return new LocalTrackView(mainWindow->getMainController(), trackID);
+    auto mainController = mainWindow->getMainController();
+    return new LocalTrackView(mainController->createInputNode(trackID));
 }
 
 void LocalTrackGroupView::setToWide()
 {
     if (trackViews.count() <= 1) { // don't allow 2 wide subchannels
-        for (BaseTrackView *trackView : this->trackViews) {
+        for (BaseTrackView *trackView : qAsConst(this->trackViews)) {
             trackView->setToWide();
         }
     }
@@ -362,7 +375,7 @@ void LocalTrackGroupView::setToWide()
 
 void LocalTrackGroupView::setToNarrow()
 {
-    for (BaseTrackView *trackView : this->trackViews) {
+    for (BaseTrackView *trackView : qAsConst(this->trackViews)) {
         trackView->setToNarrow();
     }
 
@@ -389,13 +402,6 @@ void LocalTrackGroupView::removeSubchannel()
         removeTrackView(1); // always remove the second channel
         emit trackRemoved();
     }
-}
-
-void LocalTrackGroupView::detachMainControllerInSubchannels()
-{
-    visitTracks<LocalTrackView>([&](LocalTrackView *view) {
-        view->detachMainController();
-    });
 }
 
 void LocalTrackGroupView::removeChannel()
@@ -425,7 +431,7 @@ void LocalTrackGroupView::savePreset()
                                          QDir::home().dirName(), &ok);
     if (ok && !text.isEmpty()) {
         text.append(".json");
-        mainWindow->getMainController()->savePreset(mainWindow->getInputsSettings(), text);
+        mainWindow->getMainController()->savePreset(mainWindow->getMainController()->getLastInputsSettings(), text);
     }
 }
 

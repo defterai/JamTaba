@@ -12,9 +12,12 @@
 
 const uint EmojiManager::ICONS_SIZE = 24;
 
+const QString EmojiManager::CATEGORY_RECENT = "Recent";
+const QString EmojiManager::CATEGORY_SMILEYS_PEOPLE = "Smileys & People";
+
 const QStringList EmojiManager::categories = QStringList()
-        << "Recent"
-        << "Smileys & People"
+        << CATEGORY_RECENT
+        << CATEGORY_SMILEYS_PEOPLE
         << "Music"
         << "Animals & Nature"
         << "Activities"
@@ -27,8 +30,8 @@ const QMap<QString, QString> EmojiManager::combinationsMap = EmojiManager::getCo
 
 
 Emoji::Emoji(const QString &name, const QString category, uint sortOrder, const QString &unifiedCode) :
-    name(name),
     category(category),
+    name(name),
     sortOrder(sortOrder),
     unifiedCode(unifiedCode)
 {
@@ -52,22 +55,17 @@ QString EmojiManager::getEmojiIconUrl(const Emoji &emoji) const
 
 QString EmojiManager::getEmojiIconUrl(const QString &emojiName) const
 {
-    return QString("%1/%2.png")
-            .arg(iconsPath)
-            .arg(emojiName);
+    return QString("%1/%2.png").arg(iconsPath, emojiName);
 }
 
 QAbstractItemModel *EmojiManager::getDataModel(int completeRole)
 {
-    QStandardItemModel *model = new QStandardItemModel();
-    model->setColumnCount(1);
-    model->setRowCount(generalMap.count());
+    QStandardItemModel *model = new QStandardItemModel(generalMap.count(), 1);
 
     int row = 0;
-    for (const Emoji &emoji : generalMap.values()) {
+    for (const Emoji &emoji : qAsConst(generalMap)) {
         QString prettyName = QString(emoji.name).replace("_", " ");
-        QStandardItem* item = new QStandardItem(prettyName);
-        item->setIcon(QPixmap(getEmojiIconUrl(emoji)));
+        QStandardItem* item = new QStandardItem(QPixmap(getEmojiIconUrl(emoji)), prettyName);
         item->setToolTip(prettyName);
         item->setData(emoji.unifiedCode, completeRole);
         model->setItem(row, 0, item);
@@ -75,11 +73,6 @@ QAbstractItemModel *EmojiManager::getDataModel(int completeRole)
     }
 
     return model;
-}
-
-bool emojiLessThan(const Emoji &e1, const Emoji &e2)
-{
-    return e1.sortOrder < e2.sortOrder;
 }
 
  bool EmojiManager::codeIsEmoji(uint code) const
@@ -97,12 +90,13 @@ QString EmojiManager::emojify(const QString &string)
 {
     QString replacedString(string);
 
-    for (const QString &combination : combinationsMap.keys())
-        replacedString.replace(QRegularExpression(combination), emojiCodeToUtf8(combinationsMap[combination]));
+    for (auto it = combinationsMap.begin(); it != combinationsMap.end(); ++it) {
+        replacedString.replace(QRegularExpression(it.key()), emojiCodeToUtf8(it.value()));
+    }
 
     QVector<uint> codes = replacedString.toUcs4();
     QString newString;
-    for (uint code : codes) {
+    for (uint code : qAsConst(codes)) {
         if (!EmojiManager::codeIsEmoji(code)) {
             newString.append(QString::fromUcs4(&code, 1));
         }
@@ -114,7 +108,7 @@ QString EmojiManager::emojify(const QString &string)
      return newString;
 }
 
-QStringList EmojiManager::getCategories() const
+const QStringList& EmojiManager::getCategories() const
 {
     return EmojiManager::categories;
 }
@@ -173,9 +167,10 @@ void EmojiManager::loadData(const QString &jsonPath)
     }
 
     //sort each loaded category
-    for (auto key : categorizedMap.keys()) {
-        auto &emojis = categorizedMap[key];
-        qSort(emojis.begin(), emojis.end(), emojiLessThan);
+    for (auto& emojis : categorizedMap) {
+        std::sort(emojis.begin(), emojis.end(), [](const Emoji &e1, const Emoji &e2) {
+            return e1.sortOrder < e2.sortOrder;
+        });
     }
 }
 
@@ -202,8 +197,8 @@ void EmojiManager::addRecent(const QString &emojiCode)
 {
     Emoji emoji = getByCode(emojiCode.toInt(0, 16));
 
-    categorizedMap["Recent"].removeAll(emoji);
-    categorizedMap["Recent"].push_front(emoji);
+    categorizedMap[CATEGORY_RECENT].removeAll(emoji);
+    categorizedMap[CATEGORY_RECENT].push_front(emoji);
 
     if (!recents.contains(emojiCode))
         recents << emojiCode;

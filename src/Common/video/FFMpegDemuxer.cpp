@@ -5,7 +5,7 @@
 #include <QFile>
 #include <QFileInfo>
 
-FFMpegDemuxer::FFMpegDemuxer(QObject *parent, const QByteArray &encodedData) :
+FFMpegDemuxer::FFMpegDemuxer(QObject *parent, const QSharedPointer<QByteArray>& encodedData) :
     QObject(parent),
     formatContext(nullptr),
     avioContext(nullptr),
@@ -14,7 +14,7 @@ FFMpegDemuxer::FFMpegDemuxer(QObject *parent, const QByteArray &encodedData) :
     frameRGB(nullptr),
     rgbBuffer(nullptr),
     buffer(nullptr),
-    encodedData(encodedData)
+    encodedData(*encodedData)
 {
     av_register_all();
     avcodec_register_all();

@@ -13,6 +13,8 @@
 
  */
 
+enum class LowCutState : quint8;
+
 namespace persistence {
 
 struct UsersDataCacheHeader {
@@ -63,7 +65,7 @@ public:
         return channelID;
     }
 
-    inline int getLowCutState() const
+    inline LowCutState getLowCutState() const
     {
         return lowCutState;
     }
@@ -80,7 +82,7 @@ public:
     void setPan(float pan);
     void setBoost(float boost);
     void setGain(float gain);
-    void setLowCutState(quint8 state);
+    void setLowCutState(LowCutState state);
     void setInstrumentIndex(qint8 index);
     bool hasValidInstrumentIndex() const;
 
@@ -102,7 +104,7 @@ private:
     float gain; // fader level
     float pan;
     float boost;
-    quint8 lowCutState;
+    LowCutState lowCutState;
     qint8 instrumentIndex;
 };
 

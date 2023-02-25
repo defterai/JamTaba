@@ -1,6 +1,5 @@
 #include "BaseTrackView.h"
 
-#include "MainController.h"
 #include "Utils.h"
 #include "audio/core/AudioPeak.h"
 #include "audio/core/AudioNode.h"
@@ -24,16 +23,12 @@ const uint BaseTrackView::FADER_HEIGHT = 12;
 const int BaseTrackView::NARROW_WIDTH = 85;
 const int BaseTrackView::WIDE_WIDTH = 120;
 
-QMap<long, BaseTrackView *> BaseTrackView::trackViews; // static map to quick lookup the views
-
 using audio::AudioNode;
-using controller::MainController;
 
 // -----------------------------------------------------------------------------------------
 
-BaseTrackView::BaseTrackView(MainController *mainController, long trackID) :
-    mainController(mainController),
-    trackID(trackID),
+BaseTrackView::BaseTrackView(const QSharedPointer<AudioNode>& trackNode) :
+    trackNode(trackNode),
     activated(true),
     narrowed(false),
     tintColor(Qt::black)
@@ -41,14 +36,18 @@ BaseTrackView::BaseTrackView(MainController *mainController, long trackID) :
     createLayoutStructure();
     setupVerticalLayout();
 
+    setMuteStatus(trackNode->isMuted());
+    setSoloStatus(trackNode->isSoloed());
+    setGainSliderPosition(trackNode->getGain());
+    setPanKnobPosition(trackNode->getPan());
+    setBoostStatus(trackNode->getBoost());
+
     connect(muteButton, &QPushButton::clicked, this, &BaseTrackView::toggleMuteStatus);
     connect(soloButton, &QPushButton::clicked, this, &BaseTrackView::toggleSoloStatus);
     connect(levelSlider, &QSlider::valueChanged, this, &BaseTrackView::setGain);
     connect(panSlider, &QSlider::valueChanged, this, &BaseTrackView::setPan);
     connect(boostSpinBox, &BoostSpinBox::boostChanged, this, &BaseTrackView::updateBoostValue);
-
-    // add in static map
-    BaseTrackView::trackViews.insert(trackID, this);
+    connect(trackNode.data(), &AudioNode::audioPeakChanged, this, &BaseTrackView::updateAudioPeak);
 }
 
 void BaseTrackView::setTintColor(const QColor &color)
@@ -170,26 +169,32 @@ methods (like midi messages).
 
 */
 
-void BaseTrackView::setBoostStatus(float newBoostValue)
+void BaseTrackView::setBoostStatus(float newBoostValue, void* sender)
 {
-    if (newBoostValue > 1.0) // boost value is a gain multiplier, 1.0 means 0 dB boost (boost OFF)
-        boostSpinBox->setToMax();
-    else if (newBoostValue < 1.0)
-        boostSpinBox->setToMin();
-    else
-        boostSpinBox->setToOff(); // 0 dB - OFF
+    if (sender != this) {
+        if (newBoostValue > 1.0) // boost value is a gain multiplier, 1.0 means 0 dB boost (boost OFF)
+            boostSpinBox->setToMax();
+        else if (newBoostValue < 1.0)
+            boostSpinBox->setToMin();
+        else
+            boostSpinBox->setToOff(); // 0 dB - OFF
+    }
 }
 
-void BaseTrackView::setGainSliderPosition(float newGainValue)
+void BaseTrackView::setGainSliderPosition(float newGainValue, void* sender)
 {
-    levelSlider->setValue(newGainValue * 100);
-    update(); // repaint to update the Db value
+    if (sender != this) {
+        levelSlider->setValue(Utils::poweredGainToLinear(newGainValue) * 100);
+        update(); // repaint to update the Db value
+    }
 }
 
-void BaseTrackView::setPanKnobPosition(float newPanValue)
+void BaseTrackView::setPanKnobPosition(float newPanValue, void* sender)
 {
-    // pan range is[-4,4], zero is center
-    panSlider->setValue(newPanValue * 4);
+    if (sender != this) {
+        // pan range is[-4,4], zero is center
+        panSlider->setValue(newPanValue * 4);
+    }
 }
 
 void BaseTrackView::setMuteStatus(bool newMuteStatus)
@@ -204,28 +209,22 @@ void BaseTrackView::setSoloStatus(bool newSoloStatus)
 
 void BaseTrackView::updateBoostValue(int boostValue)
 {
-    if (mainController)
-        mainController->setTrackBoost(getTrackID(), boostValue);
+    auto trackNode = this->trackNode.lock();
+    if (trackNode) {
+        emit trackNode->postBoost(Utils::dbToLinear(boostValue), this);
+    }
+}
 
+void BaseTrackView::updateAudioPeak(const audio::AudioPeak& audioPeak)
+{
+    this->audioPeak = audioPeak;
 }
 
 void BaseTrackView::updateGuiElements()
 {
-    if (!mainController)
-        return;
-
-    auto peak = mainController->getTrackPeak(getTrackID());
-    if (peak.getMaxPeak() > maxPeak.getMaxPeak()) {
-        maxPeak.update(peak);
-    }
-
     // update the track peaks
-    setPeaks(peak.getLeftPeak(), peak.getRightPeak(), peak.getLeftRMS(), peak.getRightRMS());
-
-    // update the track processors. In this moment the VST plugins GUI are updated. Some plugins need this to run your animations (see Ez Drummer, for example);
-    auto trackNode = mainController->getTrackNode(getTrackID());
-    if (trackNode)
-        trackNode->updateProcessorsGui();  // call idle in VST plugins
+    setPeaks(audioPeak.getLeftPeak(), audioPeak.getRightPeak(),
+             audioPeak.getLeftRMS(), audioPeak.getRightRMS());
 }
 
 QSize BaseTrackView::sizeHint() const
@@ -289,16 +288,20 @@ void BaseTrackView::setActivatedStatus(bool deactivated)
     updateStyleSheet();
 }
 
+QSharedPointer<audio::AudioNode> BaseTrackView::getTrack() const
+{
+    return this->trackNode.lock();
+}
+
+int BaseTrackView::getTrackID() const
+{
+    auto trackNode = this->trackNode.lock();
+    return trackNode ? trackNode->getID() : -1;
+}
+
 bool BaseTrackView::isActivated() const
 {
     return activated;
-}
-
-BaseTrackView *BaseTrackView::getTrackViewByID(long trackID)
-{
-    if (trackViews.contains(trackID))
-        return trackViews[trackID];
-    return nullptr;
 }
 
 void BaseTrackView::setPeaks(float peakLeft, float peakRight, float rmsLeft, float rmsRight)
@@ -308,30 +311,41 @@ void BaseTrackView::setPeaks(float peakLeft, float peakRight, float rmsLeft, flo
 
 BaseTrackView::~BaseTrackView()
 {
-    trackViews.remove(this->getTrackID()); // remove from static map
+
 }
 
 void BaseTrackView::setPan(int value)
 {
-    float sliderValue = value/(float)panSlider->maximum();
-    mainController->setTrackPan(this->trackID, sliderValue, true);
+    auto trackNode = this->trackNode.lock();
+    if (trackNode) {
+        float sliderValue = value / (float)panSlider->maximum();
+        emit trackNode->postPan(sliderValue, this);
+    }
 }
 
 void BaseTrackView::setGain(int value)
 {
     // signals are blocked [the third parameter] to avoid a loop in signal/slot scheme.
-    mainController->setTrackGain(this->trackID, value/100.0, true);
+    auto trackNode = this->trackNode.lock();
+    if (trackNode) {
+        emit trackNode->postGain(Utils::linearGainToPower(value / 100.0), this);
+    }
 }
 
-void BaseTrackView::toggleMuteStatus()
+void BaseTrackView::toggleMuteStatus(bool enabled)
 {
-    mainController->setTrackMute(this->trackID, !mainController->trackIsMuted(trackID), true);
+    auto trackNode = this->trackNode.lock();
+    if (trackNode) {
+        emit trackNode->postMute(enabled, this);
+    }
 }
 
-void BaseTrackView::toggleSoloStatus()
+void BaseTrackView::toggleSoloStatus(bool enabled)
 {
-    mainController->setTrackSolo(this->trackID, !mainController->trackIsSoloed(this->trackID),
-                                 true);
+    auto trackNode = this->trackNode.lock();
+    if (trackNode) {
+        emit trackNode->postSolo(enabled, this);
+    }
 }
 
 QPoint BaseTrackView::getDbValuePosition(const QString &dbValueText,

@@ -5,12 +5,11 @@ using audio::LocalInputGroup;
 using audio::LocalInputNode;
 using audio::SamplesBuffer;
 
-LocalInputGroup::LocalInputGroup(int groupIndex, QSharedPointer<LocalInputNode> firstInput) :
+LocalInputGroup::LocalInputGroup(int groupIndex) :
     groupIndex(groupIndex),
     transmiting(true),
     voiceChatActivated(false)
 {
-    addInputNode(firstInput);
 }
 
 LocalInputGroup::~LocalInputGroup()
@@ -34,12 +33,11 @@ QSharedPointer<LocalInputNode> LocalInputGroup::getInputNode(quint8 index) const
 
 void LocalInputGroup::mixGroupedInputs(SamplesBuffer &out)
 {
-    for (auto inputTrack : groupedInputs) {
+    for (const auto& inputTrack : qAsConst(groupedInputs)) {
         auto lastBuffer = inputTrack->getLastBuffer();
         if (lastBuffer.getChannels() == out.getChannels()) {
             out.add(lastBuffer);
-        }
-        else {
+        } else {
             out.add(inputTrack->getLastBufferMixedToMono());
         }
     }
@@ -58,14 +56,15 @@ int LocalInputGroup::getMaxInputChannelsForEncoding() const
 
     if (!groupedInputs.isEmpty()) {
         const auto& inputNode = groupedInputs.first();
-        if (inputNode->isMidi()) {
+        switch (inputNode->getInputMode()) {
+        case audio::LocalInputMode::MIDI:
             return 2;    // just one midi track, use stereo encoding
-        }
-        if (inputNode->isAudio()) {
-            return inputNode->getAudioInputRange().getChannels();
-        }
-        if (inputNode->isNoInput()) {
+        case audio::LocalInputMode::AUDIO:
+            return inputNode->getAudioInputProps().getChannels();
+        case audio::LocalInputMode::DISABLED:
             return 2;    // allow channels using noInput but processing some vst looper in stereo
+        default:
+            return 0;    // no channels to encoding
         }
     }
     return 0;    // no channels to encoding

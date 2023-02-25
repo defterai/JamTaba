@@ -29,7 +29,6 @@ public:
     virtual void togglePeakMeterOnlyMode();
     bool isShowingPeakMeterOnly() const;
 
-    void detachMainControllerInSubchannels();
     void closePluginsWindows();
 
     void setToNarrow();
@@ -119,6 +118,7 @@ private slots:
     void savePreset();
     void resetLocalTracks();
     void deletePreset(QAction *action);
+    void storeChannelInstrumentIndex(int instrumentIndex);
 
     void toggleTransmitingStatus(bool checked);
     void toggleVoiceChatStatus(bool checked);

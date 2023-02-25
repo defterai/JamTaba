@@ -76,9 +76,9 @@ void EmojiWidget::setVisible(bool visible)
         QLayout *gridLayout = scrollArea->widget()->layout();
 
         if (emojiManager->hasRecents())
-            showCategory("Recent");
+            showCategory(EmojiManager::CATEGORY_RECENT);
         else if (!gridLayout)
-            showCategory("Smileys & People");
+            showCategory(EmojiManager::CATEGORY_SMILEYS_PEOPLE);
     }
 }
 
@@ -104,7 +104,7 @@ void EmojiWidget::showCategory(const QString &category)
 
     uint index = 0;
 
-    for (const Emoji &emoji : emojis) {
+    for (const Emoji &emoji : qAsConst(emojis)) {
         auto button = new QToolButton();
         button->setIcon(QPixmap(emojiManager->getEmojiIconUrl(emoji)));
         button->setIconSize(QSize(EmojiManager::ICONS_SIZE, EmojiManager::ICONS_SIZE));
@@ -112,7 +112,7 @@ void EmojiWidget::showCategory(const QString &category)
         QString toolTip = QString(emoji.name).replace(QChar('_'), QString(" "));
         button->setToolTip(toolTip);
 
-        connect(button, &QToolButton::clicked, [=](){
+        connect(button, &QToolButton::clicked, this, [=](){
             emojiManager->addRecent(emoji.unifiedCode);
 
             emit emojiSelected(emoji.unifiedCode);
@@ -135,20 +135,20 @@ QLayout *EmojiWidget::createCategoriesLayout()
 {
     auto hLayout = new QHBoxLayout();
 
-    for (auto category : emojiManager->getCategories()) {
+    for (const auto& category : qAsConst(emojiManager->getCategories())) {
         auto button = new QToolButton();
         button->setToolTip(category);
         QString imageName = category.split(" ").at(0); // at(0) always return at least the original string
         QString iconPath = QString(":/emoji/categories/%1.png").arg(imageName);
         button->setIcon(QPixmap(iconPath));
 
-        connect(button, &QToolButton::clicked, [=](){
+        connect(button, &QToolButton::clicked, this, [=](){
             showCategory(category);
         });
 
         hLayout->addWidget(button, 1, Qt::AlignCenter);
 
-        if (category == "Recent")
+        if (category == EmojiManager::CATEGORY_RECENT)
             recentButton = button;
     }
 

@@ -29,6 +29,33 @@ public:
         // linear-to-db(x) = log(x) * 20
         return std::log10(linearValue) * 20.0;
     }
+
+    static inline float clampPan(float value)
+    {
+        if (value < -1)
+            return -1;
+        if (value > 1)
+            return 1;
+        return value;
+    }
+
+    static inline float clampGain(float value)
+    {
+        if (value < 0)
+            return 0;
+        if (value > 2)
+            return 2;
+        return value;
+    }
+
+    static inline int clampBoost(int value)
+    {
+        if (value == 0)
+            return 0;
+        if (value < 0)
+            return -1;
+        return 1;
+    }
 };
 
 #endif // UTILS_H

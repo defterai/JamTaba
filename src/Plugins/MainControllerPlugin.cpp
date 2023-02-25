@@ -1,6 +1,7 @@
 #include "MainControllerPlugin.h"
 #include "midi/MidiDriver.h"
 #include "audio/core/LocalInputNode.h"
+#include "controller/AudioController.h"
 #include "gui/MainWindow.h"
 #include "JamTabaPlugin.h"
 #include "log/Logging.h"
@@ -14,8 +15,7 @@ MainControllerPlugin::MainControllerPlugin(const Settings &settings, JamTabaPlug
 
 MainControllerPlugin::~MainControllerPlugin()
 {
-    if (mainWindow)
-        saveLastUserSettings(mainWindow->getInputsSettings());
+    saveLastUserSettings();
 }
 
 persistence::Preset MainControllerPlugin::loadPreset(const QString &name)
@@ -23,15 +23,20 @@ persistence::Preset MainControllerPlugin::loadPreset(const QString &name)
     return settings.readPresetFromFile(name, false); // don't allow multi subchannels in vst plugin and avoid hacking in json file to create subchannels in VSt plugin.
 }
 
-
-int MainControllerPlugin::addInputTrackNode(QSharedPointer<audio::LocalInputNode> inputTrackNode)
+QSharedPointer<audio::LocalInputNode> MainControllerPlugin::createInputNode(int groupIndex)
 {
-    int inputTrackID = MainController::addInputTrackNode(inputTrackNode);
+    auto inputTrackNode = MainController::createInputNode(groupIndex);
 
     // VST plugins always use audio as input
-    int firstChannelIndex = (inputTracks.size()-1) * 2;
-    inputTrackNode->setAudioInputSelection(firstChannelIndex, 2);
-    return inputTrackID;
+
+    int inputTracksCount;
+    audioController->postTask([&]() {
+        inputTracksCount = audioController->getInputTracksCount();
+    }).waitForFinished();
+    int firstChannelIndex = (inputTracksCount - 1) * 2;
+    emit inputTrackNode->postSetAudioInputProps(audio::LocalAudioInputProps(firstChannelIndex, 2), this); //stereo
+    emit inputTrackNode->postSetInputMode(audio::LocalInputMode::AUDIO, this);
+    return inputTrackNode;
 }
 
 QString MainControllerPlugin::getUserEnvironmentString() const

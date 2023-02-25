@@ -72,7 +72,6 @@ public:
     QList<NinjamTrackGroupView *> getTrackGroups() const;
 
 public slots:
-    void setChannelXmitStatus(long channelID, bool transmiting);
     void resetBpiComboBox();
     void resetBpmComboBox();
     void showChordProgressionDialog(const ChordProgression &currentProgression);
@@ -90,6 +89,7 @@ protected:
 
 private:
     QMap<QString, NinjamTrackGroupView *> trackGroups;
+    QMap<int, NinjamTrackView *> trackIndex;
 
     login::RoomInfo roomInfo;
 
@@ -148,14 +148,14 @@ private slots:
     // metronome events
     void setMetronomePanSliderPosition(int value);
     void setMetronomeFaderPosition(int value);
-    void toggleMetronomeMuteStatus();
-    void toggleMetronomeSoloStatus();
+    void toggleMetronomeMuteStatus(bool enabled);
+    void toggleMetronomeSoloStatus(bool enabled);
     void showMetronomePreferences();
     void showMetronomeFloatingWindow(bool show);
     void deleteFloatingWindow();
 
     // video
-    void setVideoInterval(const User &user, const QByteArray &encodedVideoData);
+    void setVideoInterval(const User &user, const QSharedPointer<QByteArray>& encodedVideoData);
 
     // ninjam controller events
     void addChannel(const User &user, const UserChannel &channel, long channelID);

@@ -1,5 +1,6 @@
 #include "LocalTrackViewStandalone.h"
 #include "audio/core/LocalInputNode.h"
+#include "audio/core/LocalInputGroup.h"
 #include "audio/core/Plugins.h"
 #include "FxPanel.h"
 #include "FxPanelItem.h"
@@ -11,12 +12,14 @@
 #include <QStyle>
 #include <QSlider>
 #include <QPainter>
-#include <QDesktopWidget>
+#include <QScreen>
 #include <QPainterPath>
 
-LocalTrackViewStandalone::LocalTrackViewStandalone(controller::MainControllerStandalone *mainController, int channelIndex) :
-    LocalTrackView(mainController, channelIndex),
-    controller(mainController),
+LocalTrackViewStandalone::LocalTrackViewStandalone(controller::MainControllerStandalone* controller,
+                                                   const QSharedPointer<audio::LocalInputNode>& trackNode) :
+    LocalTrackView(trackNode),
+    controller(controller),
+    midiActivityValue(0),
     midiToolsDialog(nullptr),
     midiRoutingArrowColor(QColor(255, 0, 0, 100))
 {
@@ -51,7 +54,15 @@ LocalTrackViewStandalone::LocalTrackViewStandalone(controller::MainControllerSta
 
     inputSelectionButton->installEventFilter(this);
 
-    connect(inputNode.data(), &audio::LocalInputNode::midiNoteLearned, this, &LocalTrackViewStandalone::useLearnedMidiNote);
+    this->inputMode = trackNode->getInputMode();
+    this->audioInputProps = trackNode->getAudioInputProps();
+    this->midiInputProps = trackNode->getMidiInputProps();
+
+    connect(trackNode.data(), &audio::LocalInputNode::midiNoteLearned, this, &LocalTrackViewStandalone::useLearnedMidiNote);
+    connect(trackNode.data(), &audio::LocalInputNode::midiActivityDetected, this, &LocalTrackViewStandalone::midiActivityDetected);
+    connect(trackNode.data(), &audio::LocalInputNode::inputModeChanged, this, &LocalTrackViewStandalone::inputModeChanged);
+    connect(trackNode.data(), &audio::LocalInputNode::audioInputPropsChanged, this, &LocalTrackViewStandalone::audioInputPropsChanged);
+    connect(trackNode.data(), &audio::LocalInputNode::midiInputPropsChanged, this, &LocalTrackViewStandalone::midiInputPropsChanged);
 
     translateUI();
 }
@@ -65,22 +76,23 @@ void LocalTrackViewStandalone::setTintColor(const QColor &color)
 
 void LocalTrackViewStandalone::setToMidi()
 {
-    int midiChannel = -1;
-    int midiDeviceIndex = 0;
-
-    controller->setInputTrackToMIDI(getTrackID(), midiDeviceIndex, midiChannel);
-
-    emit trackInputChanged();
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        midiInputProps.setDevice(0);
+        midiInputProps.setChannel(-1);
+        controller->setInputTrackToMIDI(inputNode, midiInputProps);
+        emit trackInputChanged();
+    }
 }
 
 bool LocalTrackViewStandalone::isNoInput() const
 {
-    return inputNode->isNoInput();
+    return inputMode == audio::LocalInputMode::DISABLED;
 }
 
 bool LocalTrackViewStandalone::isMidi() const
 {
-    return inputNode->isMidi();
+    return inputMode == audio::LocalInputMode::MIDI;
 }
 
 void LocalTrackViewStandalone::paintRoutingMidiArrow(int topMargin, int arrowSize, bool drawMidiWord)
@@ -153,17 +165,17 @@ void LocalTrackViewStandalone::paintEvent(QPaintEvent *ev)
 {
     LocalTrackView::paintEvent(ev);
 
+    auto inputNode = getInputNode();
+    if (!inputNode) return;
+
     const int topMargin = levelSlider->y() - 6;
     static const int arrowSize = 4;
 
     if (inputNode->isRoutingMidiInput()) {
         bool drawMidiWord = !isShowingPeakMetersOnly();
         paintRoutingMidiArrow(topMargin, arrowSize, drawMidiWord);
-    }
-    else {
-        if (inputNode->isReceivingRoutedMidiInput()) {
-            paintReceivingRoutedMidiIndicator(topMargin);
-        }
+    } else if (inputNode->isReceivingRoutedMidiInput()) {
+        paintReceivingRoutedMidiIndicator(topMargin);
     }
 }
 
@@ -181,8 +193,42 @@ void LocalTrackViewStandalone::translateUI()
 void LocalTrackViewStandalone::useLearnedMidiNote(quint8 midiNote)
 {
     if (midiToolsDialog && midiToolsDialog->isVisible()) {
-        QString midiNoteName = getMidiNoteText(midiNote);
-        midiToolsDialog->setLearnedMidiNote(midiNoteName);
+        midiToolsDialog->setLearnedMidiNote(midiNote);
+    }
+}
+
+void LocalTrackViewStandalone::midiActivityDetected(quint8 midiActivityValue)
+{
+    if (this->midiActivityValue < midiActivityValue) {
+        this->midiActivityValue = midiActivityValue;
+    }
+}
+
+void LocalTrackViewStandalone::inputModeChanged(audio::LocalInputMode inputMode, void* sender)
+{
+    if (sender != this) {
+        this->inputMode = inputMode;
+        updateInputIcon();
+        updateInputText();
+    }
+}
+
+
+void LocalTrackViewStandalone::audioInputPropsChanged(audio::LocalAudioInputProps audioInputProps, void* sender)
+{
+    if (sender != this) {
+        this->audioInputProps = audioInputProps;
+        updateInputIcon();
+        updateInputText();
+    }
+}
+
+void LocalTrackViewStandalone::midiInputPropsChanged(audio::MidiInputProps midiInputProps, void* sender)
+{
+    if (sender != this) {
+        this->midiInputProps = midiInputProps;
+        updateInputIcon();
+        updateInputText();
     }
 }
 
@@ -190,14 +236,14 @@ void LocalTrackViewStandalone::updateGuiElements()
 {
     LocalTrackView::updateGuiElements();
 
-    if (inputNode && inputNode->hasMidiActivity()) {
-        quint8 midiActivityValue = inputNode->getMidiActivityValue();
-        midiPeakMeter->setActivityValue(midiActivityValue/127.0);
-        inputNode->resetMidiActivity();
+    if (midiActivityValue != 0) {
+        midiPeakMeter->setActivityValue(midiActivityValue / 127.0);
+        midiActivityValue = 0;
     }
 
-    if (midiPeakMeter->isVisible())
+    if (midiPeakMeter->isVisible()) {
         midiPeakMeter->update();
+    }
 }
 
 void LocalTrackViewStandalone::reset()
@@ -265,8 +311,8 @@ void LocalTrackViewStandalone::setAudioRelatedControlsStatus(bool enableControls
         soloButton,
         muteButton,
         buttonStereoInversion,
-        dynamic_cast<QWidget *>(panSlider),
-        dynamic_cast<QWidget *>(levelSlider)
+        static_cast<QWidget*>(panSlider),
+        static_cast<QWidget*>(levelSlider)
     };
 
     for (QWidget *control : controls) {
@@ -279,33 +325,31 @@ void LocalTrackViewStandalone::setAudioRelatedControlsStatus(bool enableControls
 
 void LocalTrackViewStandalone::setMidiRouting(bool routingMidiToFirstSubchannel)
 {
-    inputNode->setRoutingMidiInput(routingMidiToFirstSubchannel);
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        inputNode->setRoutingMidiInput(routingMidiToFirstSubchannel);
 
-    bool enableAudioControls = !inputNode->isRoutingMidiInput();
-    setAudioRelatedControlsStatus(enableAudioControls);
-    enableLopperButton(enableAudioControls && mainController->isPlayingInNinjamRoom());
-    update();
-}
-
-bool LocalTrackViewStandalone::isFirstSubchannel() const
-{
-    auto firstSubchannel = mainController->getInputTrackInGroup(inputNode->getChanneGroupIndex(), 0);
-
-    return firstSubchannel == this->inputNode;
+        bool enableAudioControls = !inputNode->isRoutingMidiInput();
+        setAudioRelatedControlsStatus(enableAudioControls);
+        enableLopperButton(enableAudioControls && controller->isPlayingInNinjamRoom());
+        update();
+    }
 }
 
 void LocalTrackViewStandalone::openMidiToolsDialog()
 {
     if (!midiToolsDialog) {
         qCDebug(jtGUI) << "Creating a new MidiToolsDialog!";
-        QString higherNote = getMidiNoteText(inputNode->getMidiHigherNote());
-        QString lowerNote = getMidiNoteText(inputNode->getMidiLowerNote());
-        qint8 transpose = inputNode->getTranspose();
-        bool routingMidiInput = inputNode->isRoutingMidiInput();
+        quint8 higherNote = midiInputProps.getHigherNote();
+        quint8 lowerNote = midiInputProps.getLowerNote();
+        qint8 transpose = midiInputProps.getTranspose();
+        auto inputNode = getInputNode();
+        bool routingMidiInput = inputNode && inputNode->isRoutingMidiInput();
 
         midiToolsDialog = new MidiToolsDialog(lowerNote, higherNote, transpose, routingMidiInput);
-        if (isFirstSubchannel())
-            midiToolsDialog->hideMidiRoutingControls(); // midi routing is available only in second subchannel
+
+        //if (inputNode && inputNode->isFirstSubchannel())
+        //    midiToolsDialog->hideMidiRoutingControls(); // midi routing is available only in second subchannel
 
         connect(midiToolsDialog, &MidiToolsDialog::dialogClosed, this, &LocalTrackViewStandalone::onMidiToolsDialogClosed);
         connect(midiToolsDialog, &MidiToolsDialog::lowerNoteChanged, this, &LocalTrackViewStandalone::setMidiLowerNote);
@@ -315,12 +359,14 @@ void LocalTrackViewStandalone::openMidiToolsDialog()
         connect(midiToolsDialog, &MidiToolsDialog::midiRoutingCheckBoxClicked, this, &LocalTrackViewStandalone::setMidiRouting);
     }
 
-    QRect desktopRect = QApplication::desktop()->availableGeometry();
-
+    QRect desktopRect = screen()->availableGeometry();
     QPoint point = mapToGlobal(QPoint(x() + width(), inputPanel->y()));
 
-    if (point.y() + midiToolsDialog->height() > desktopRect.height()) {
-        point.setY( desktopRect.height() - (midiToolsDialog->height() + 35)); //align in bottom with 35 pixels in margim
+    if (point.x() + midiToolsDialog->width() > desktopRect.right()) {
+        point.setX(desktopRect.right() - (midiToolsDialog->width() + 35));
+    }
+    if (point.y() + midiToolsDialog->height() > desktopRect.bottom()) {
+        point.setY(desktopRect.bottom() - (midiToolsDialog->height() + 35)); //align in bottom with 35 pixels in margim
     }
 
     midiToolsDialog->move(point);
@@ -338,91 +384,47 @@ void LocalTrackViewStandalone::toggleMidiNoteLearn(bool buttonClicked)
 
 void LocalTrackViewStandalone::startMidiNoteLearn()
 {
+    midiInputProps.setLearning(true);
+    auto inputNode = getInputNode();
     if (inputNode) {
-        inputNode->startMidiNoteLearn();
+        emit inputNode->postSetMidiInputProps(midiInputProps, this);
     }
 }
 
 void LocalTrackViewStandalone::stopMidiNoteLearn()
 {
+    midiInputProps.setLearning(false);
+    auto inputNode = getInputNode();
     if (inputNode) {
-        inputNode->stopMidiNoteLearn();
+        emit inputNode->postSetMidiInputProps(midiInputProps, this);
     }
 }
 
 void LocalTrackViewStandalone::setTranspose(qint8 transposeValue)
 {
-     if (inputNode) {
-         inputNode->setTranspose(transposeValue);
-     }
-}
-
-void LocalTrackViewStandalone::setMidiHigherNote(const QString &higherNote)
-{
+    midiInputProps.setTranspose(transposeValue);
+    auto inputNode = getInputNode();
     if (inputNode) {
-        quint8 noteNumber = getMidiNoteNumber(higherNote);
-        inputNode->setMidiHigherNote(noteNumber);
+        emit inputNode->postSetMidiInputProps(midiInputProps, this);
     }
 }
 
-void LocalTrackViewStandalone::setMidiLowerNote(const QString &lowerNote)
+void LocalTrackViewStandalone::setMidiHigherNote(quint8 higherNote)
 {
+    midiInputProps.setHigherNote(higherNote);
+    auto inputNode = getInputNode();
     if (inputNode) {
-        quint8 noteNumber = getMidiNoteNumber(lowerNote);
-        inputNode->setMidiLowerNote(noteNumber);
+        emit inputNode->postSetMidiInputProps(midiInputProps, this);
     }
 }
 
-QString LocalTrackViewStandalone::getMidiNoteText(quint8 midiNoteNumber) const
+void LocalTrackViewStandalone::setMidiLowerNote(quint8 lowerNote)
 {
-    int octave = midiNoteNumber/12;
-    QString noteName = "";
-    switch (midiNoteNumber % 12) {
-        case 0: noteName = QStringLiteral("C"); break;
-        case 1: noteName = QStringLiteral("C#"); break;
-        case 2: noteName = QStringLiteral("D"); break;
-        case 3: noteName = QStringLiteral("D#"); break;
-        case 4: noteName = QStringLiteral("E"); break;
-        case 5: noteName = QStringLiteral("F"); break;
-        case 6: noteName = QStringLiteral("F#"); break;
-        case 7: noteName = QStringLiteral("G"); break;
-        case 8: noteName = QStringLiteral("G#"); break;
-        case 9: noteName = QStringLiteral("A"); break;
-        case 10: noteName = QStringLiteral("A#"); break;
-        case 11: noteName = QStringLiteral("B"); break;
+    midiInputProps.setLowerNote(lowerNote);
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        emit inputNode->postSetMidiInputProps(midiInputProps, this);
     }
-    return noteName + QString::number(octave);
-}
-
-quint8 LocalTrackViewStandalone::getMidiNoteNumber(const QString &midiNote) const
-{
-    // midi note numbers: http://www.midimountain.com/midi/midi_note_numbers.html
-
-    if (midiNote.length() < 2)
-        return -1;
-
-     quint8 noteNumber = 0;
-     switch (midiNote.at(0).toLatin1()) {
-        case 'C': noteNumber = 0; break;
-        case 'D': noteNumber = 2; break;
-        case 'E': noteNumber = 4; break;
-        case 'F': noteNumber = 5; break;
-        case 'G': noteNumber = 7; break;
-        case 'A': noteNumber = 9; break;
-        case 'B': noteNumber = 11; break;
-     default: noteNumber = 0;
-         break;
-     }
-     int octave = midiNote.at( (midiNote.length() > 2) ? 2 : 1).toLatin1() - 48; // ascii to int
-
-     noteNumber += (octave * 12);
-
-     if (midiNote.contains('b'))
-         noteNumber--;
-     if (midiNote.contains('#'))
-         noteNumber++;
-
-     return noteNumber;
 }
 
 void LocalTrackViewStandalone::onMidiToolsDialogClosed()
@@ -440,23 +442,49 @@ void LocalTrackViewStandalone::addPlugin(const QSharedPointer<audio::Plugin> &pl
         refreshInputSelectionName(); // refresh input type combo box, if the added plugins is a virtual instrument Jamtaba will try auto change the input type to midi
         update();
     }
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        plugin->start();
+        inputNode->addProcessor(plugin, slotIndex);
+    }
 }
 
-qint32 LocalTrackViewStandalone::getPluginFreeSlotIndex() const
+void LocalTrackViewStandalone::swapPlugins(quint32 firstSlotIndex, quint32 secondSlotIndex)
 {
-    return fxPanel->getPluginFreeSlotIndex();
+    if (fxPanel) {
+        fxPanel->swapPlugins(firstSlotIndex, secondSlotIndex);
+        update();
+    }
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        inputNode->swapProcessors(firstSlotIndex, secondSlotIndex);
+    }
 }
 
-QList<QSharedPointer<audio::Plugin>> LocalTrackViewStandalone::getInsertedPlugins() const
+void LocalTrackViewStandalone::removePlugin(const QSharedPointer<audio::Plugin> &plugin)
 {
-    QList<QSharedPointer<audio::Plugin>> plugins;
-    if (fxPanel) { // can be nullptr in vst plugin
-        for (auto item : fxPanel->getItems()) {
-            if (item->containPlugin())
-                plugins.append(item->getAudioPlugin());
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        QString pluginName = plugin->getName();
+        try
+        {
+            inputNode->removeProcessor(plugin);
+        }
+        catch (...)
+        {
+            qCritical() << "Error removing plugin: " << pluginName;
         }
     }
-    return plugins;
+}
+
+qint32 LocalTrackViewStandalone::getPluginSlotIndex(const QSharedPointer<Plugin> &plugin) const
+{
+    return fxPanel->getPluginSlotIndex(plugin);
+}
+
+qint32 LocalTrackViewStandalone::getPluginSlotCount() const
+{
+    return fxPanel->getItems().length();
 }
 
 FxPanel *LocalTrackViewStandalone::createFxPanel()
@@ -503,8 +531,11 @@ void LocalTrackViewStandalone::setPeakMetersOnlyMode(bool peakMetersOnly)
 void LocalTrackViewStandalone::setupMetersLayout()
 {
     LocalTrackView::setupMetersLayout();
-    if (midiPeakMeter) {
-        midiPeakMeter->setVisible(inputNode->isMidi() || inputNode->isRoutingMidiInput() || inputNode->isReceivingRoutedMidiInput());
+    auto inputNode = getInputNode();
+    if (inputNode && midiPeakMeter) {
+        midiPeakMeter->setVisible(inputMode == audio::LocalInputMode::MIDI ||
+                                  inputNode->isRoutingMidiInput() ||
+                                  inputNode->isReceivingRoutedMidiInput());
     }
 }
 
@@ -605,9 +636,9 @@ QMenu *LocalTrackViewStandalone::createMidiInputsMenu(QMenu *parent)
             allChannelsAction->setData(QString(QString::number(d) + ":" + QString::number(-1))); // use -1 to all channels
             allChannelsAction->setActionGroup(actionGroup);
             allChannelsAction->setCheckable(true);
-            allChannelsAction->setChecked(
-                inputNode->isMidi() && inputNode->getMidiDeviceIndex() == d
-                && inputNode->isReceivingAllMidiChannels());
+            allChannelsAction->setChecked(inputMode == audio::LocalInputMode::MIDI &&
+                                          midiInputProps.getDevice() == d &&
+                                          midiInputProps.isReceivingAllMidiChannels());
 
             midiChannelsMenu->addSeparator();
             for (int c = 0; c < 16; ++c) {
@@ -615,9 +646,9 @@ QMenu *LocalTrackViewStandalone::createMidiInputsMenu(QMenu *parent)
                 a->setData(QString(QString::number(d) + ":" + QString::number(c))); // use device:channel_index as data
                 a->setActionGroup(actionGroup);
                 a->setCheckable(true);
-                a->setChecked(
-                    inputNode->isMidi() && inputNode->getMidiChannelIndex() == c
-                    && inputNode->getMidiDeviceIndex() == d);
+                a->setChecked(inputMode == audio::LocalInputMode::MIDI &&
+                              midiInputProps.getChannel() == c &&
+                              midiInputProps.getDevice() == d);
             }
 
             QString deviceName = controller->getMidiDriver()->getInputDeviceName(d);
@@ -638,12 +669,13 @@ QMenu *LocalTrackViewStandalone::createMidiInputsMenu(QMenu *parent)
 
 void LocalTrackViewStandalone::setToNoInput()
 {
+    auto inputNode = getInputNode();
     if (inputNode) {
 
         if (inputNode->isRoutingMidiInput())
             setMidiRouting(false);
 
-        inputNode->setToNoInput();
+        emit inputNode->postSetInputMode(audio::LocalInputMode::DISABLED, this);
 
         refreshInputSelectionName();
 
@@ -653,21 +685,21 @@ void LocalTrackViewStandalone::setToNoInput()
 
 QPixmap LocalTrackViewStandalone::getInputTypePixmap()
 {
-    if (inputNode->isAudio()) { // using audio as input method
-        if (inputNode->isStereo())
+    switch (inputMode) {
+    case audio::LocalInputMode::AUDIO:
+        if (audioInputProps.getChannelRange().isStereo())
             return IconFactory::createStereoInputIcon(tintColor);
-        else if (inputNode->isMono())
+        if (audioInputProps.getChannelRange().isMono())
             return IconFactory::createMonoInputIcon(tintColor);
-        else
-            return IconFactory::createNoInputIcon(tintColor); // range is empty = no audio input
-    }
-
-    if (inputNode->isMidi()) {
-        if (canUseMidiDeviceIndex(inputNode->getMidiDeviceIndex()))
+        return IconFactory::createNoInputIcon(tintColor);
+    case audio::LocalInputMode::MIDI:
+        if (canUseMidiDeviceIndex(midiInputProps.getDevice()))
             return IconFactory::createMidiIcon(tintColor);
+        return IconFactory::createNoInputIcon(tintColor);
+    case audio::LocalInputMode::DISABLED:
+    default:
+        return IconFactory::createNoInputIcon(tintColor);
     }
-
-    return IconFactory::createNoInputIcon(tintColor);
 }
 
 bool LocalTrackViewStandalone::canUseMidiDeviceIndex(int midiDeviceIndex) const
@@ -688,21 +720,22 @@ void LocalTrackViewStandalone::updateInputIcon()
 
 void LocalTrackViewStandalone::refreshInputSelectionName()
 {
-    auto inputTrack = controller->getInputTrack(getTrackID());
-
-    if (inputTrack->isMidi() && !canUseMidiDeviceIndex(inputTrack->getMidiDeviceIndex()))
-        inputTrack->setToNoInput();
+    auto inputNode = getInputNode();
+    if (inputNode && inputMode == audio::LocalInputMode::MIDI && !canUseMidiDeviceIndex(midiInputProps.getDevice())) {
+        emit inputNode->postSetInputMode(audio::LocalInputMode::DISABLED, this);
+    }
 
     updateInputText();
     updateInputIcon();
 
-    setMidiPeakMeterVisibility(inputNode->isMidi() || inputNode->isRoutingMidiInput() || inputNode->isReceivingRoutedMidiInput());
+    if (inputNode) {
+        setMidiPeakMeterVisibility(inputMode == audio::LocalInputMode::MIDI || inputNode->isRoutingMidiInput() || inputNode->isReceivingRoutedMidiInput());
+        //stereo, midi or no-input can be stereo inverted. Sometimes we are using 'no-input' but using some VSTi generating loops, for example. These VSTi will generate stereo output and can be inverted.
+        buttonStereoInversion->setEnabled(!audioInputProps.getChannelRange().isMono() && !inputNode->isRoutingMidiInput());
+    }
 
-    midiToolsButton->setVisible( canShowMidiToolsButton() );
+    midiToolsButton->setVisible(canShowMidiToolsButton());
     inputTypeIconLabel->setVisible(canShowInputTypeIcon());
-
-    buttonStereoInversion->setEnabled(!inputNode->isMono() && !inputNode->isRoutingMidiInput()); //stereo, midi or no-input can be stereo inverted. Sometimes we are using 'no-input' but using some VSTi generating loops, for example. These VSTi will generate stereo output and can be inverted.
-
     updateStyleSheet();
     updateGeometry();
     update();
@@ -710,16 +743,16 @@ void LocalTrackViewStandalone::refreshInputSelectionName()
 
 QString LocalTrackViewStandalone::getAudioInputText()
 {
-    auto inputRange = inputNode->getAudioInputRange();
-    if (inputNode->isStereo()) {
-        int firstInputIndex = inputRange.getFirstChannel() + controller->getAudioDriver()->getFirstSelectedInput();
+    const auto& channelRange = audioInputProps.getChannelRange();
+    if (channelRange.isStereo()) {
+        int firstInputIndex = channelRange.getFirstChannel() + controller->getAudioDriver()->getFirstSelectedInput();
         QString indexes = "(" + QString::number(firstInputIndex+1) + "+" + QString::number(firstInputIndex+2) + ") ";
         return indexes + getInputChannelNameOnly(firstInputIndex);
     }
 
-    if (inputNode->isMono()) {
+    if (channelRange.isMono()) {
         auto audioDriver = controller->getAudioDriver();
-        int index = inputRange.getFirstChannel() + controller->getAudioDriver()->getFirstSelectedInput();
+        int index = channelRange.getFirstChannel() + controller->getAudioDriver()->getFirstSelectedInput();
         QString name = QString(audioDriver->getInputChannelName(index));
         QString inputType = QString(QString::number(index+1) + " - ");
         if (!name.isNull() && !name.isEmpty())
@@ -737,7 +770,7 @@ QString LocalTrackViewStandalone::getAudioInputText()
 QString LocalTrackViewStandalone::getMidiInputText()
 {
     auto midiDriver = controller->getMidiDriver();
-    int selectedDeviceIndex = inputNode->getMidiDeviceIndex();
+    int selectedDeviceIndex = midiInputProps.getDevice();
     if (selectedDeviceIndex < midiDriver->getMaxInputDevices() && midiDriver->inputDeviceIsGloballyEnabled(selectedDeviceIndex)) {
         return midiDriver->getInputDeviceName(selectedDeviceIndex);
     } // midi device index invalid
@@ -747,15 +780,16 @@ QString LocalTrackViewStandalone::getMidiInputText()
 
 QString LocalTrackViewStandalone::getInputText()
 {
-    if (inputNode->isAudio()) { // using audio as input method
+    switch (inputMode) {
+    case audio::LocalInputMode::AUDIO:
+         // using audio as input method
         return getAudioInputText();
-    }
-
-    if (inputNode->isMidi()) {
+    case audio::LocalInputMode::MIDI:
         return getMidiInputText();
+    case audio::LocalInputMode::DISABLED:
+    default:
+        return getNoInputText();
     }
-
-    return getNoInputText();
 }
 
 void LocalTrackViewStandalone::updateInputText()
@@ -771,12 +805,12 @@ void LocalTrackViewStandalone::updateInputText()
 
 bool LocalTrackViewStandalone::canShowInputTypeIcon() const
 {
-    return !inputNode->isMidi() && !isShowingPeakMetersOnly();
+    return inputMode != audio::LocalInputMode::MIDI && !isShowingPeakMetersOnly();
 }
 
 bool LocalTrackViewStandalone::canShowMidiToolsButton() const
 {
-    return inputNode->isMidi() && !isShowingPeakMetersOnly();
+    return inputMode == audio::LocalInputMode::MIDI && !isShowingPeakMetersOnly();
 }
 
 void LocalTrackViewStandalone::setMidiPeakMeterVisibility(bool visible)
@@ -787,11 +821,14 @@ void LocalTrackViewStandalone::setMidiPeakMeterVisibility(bool visible)
 
 void LocalTrackViewStandalone::setToMono(QAction *action)
 {
-    if (inputNode->isRoutingMidiInput())
-        setMidiRouting(false);
-
-    int selectedInputIndexInAudioDevice = action->data().toInt();
-    controller->setInputTrackToMono(getTrackID(), selectedInputIndexInAudioDevice);
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        if (inputNode->isRoutingMidiInput()) {
+            setMidiRouting(false);
+        }
+        int selectedInputIndexInAudioDevice = action->data().toInt();
+        controller->setInputTrackToMono(inputNode, selectedInputIndexInAudioDevice);
+    }
     setMidiPeakMeterVisibility(false);
     levelSlider->setStereo(false);
 
@@ -800,11 +837,14 @@ void LocalTrackViewStandalone::setToMono(QAction *action)
 
 void LocalTrackViewStandalone::setToStereo(QAction *action)
 {
-    if (inputNode->isRoutingMidiInput())
-        setMidiRouting(false);
-
-    int firstInputIndexInAudioDevice = action->data().toInt();
-    controller->setInputTrackToStereo(getTrackID(), firstInputIndexInAudioDevice);
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        if (inputNode->isRoutingMidiInput()) {
+            setMidiRouting(false);
+        }
+        int firstInputIndexInAudioDevice = action->data().toInt();
+        controller->setInputTrackToStereo(inputNode, firstInputIndexInAudioDevice);
+    }
     setMidiPeakMeterVisibility(false);
 
     levelSlider->setStereo(true);
@@ -827,7 +867,13 @@ void LocalTrackViewStandalone::setToMidi(QAction *action)
     int midiChannel = midiChannelString.toInt();
     int midiDeviceIndex = midiDeviceString.toInt();
 
-    controller->setInputTrackToMIDI(getTrackID(), midiDeviceIndex, midiChannel);
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        audio::MidiInputProps props = midiInputProps;
+        props.setDevice(midiDeviceIndex);
+        props.setChannel(midiChannel);
+        controller->setInputTrackToMIDI(inputNode, props);
+    }
 
     levelSlider->setStereo(true);
 

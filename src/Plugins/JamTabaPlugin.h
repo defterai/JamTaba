@@ -2,6 +2,7 @@
 #define JAMTABA_PLUGIN_H
 
 #include "MainControllerPlugin.h"
+#include <QSharedPointer>
 
 /** this is the base class for VST and AU plugins */
 
@@ -31,11 +32,9 @@ protected:
     //int sampleRate;
     QScopedPointer<MainControllerPlugin> controller;
     bool running;
-    audio::SamplesBuffer inputBuffer;
-    audio::SamplesBuffer outputBuffer;
+    QSharedPointer<audio::SamplesBuffer> inputBuffer;
+    QSharedPointer<audio::SamplesBuffer> outputBuffer;
     bool hostWasPlayingInLastAudioCallBack;
-
-    
 
     static bool instanceIsInitialized;
 

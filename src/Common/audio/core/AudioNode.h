@@ -6,6 +6,7 @@
 #include "SamplesBuffer.h"
 #include "AudioDriver.h"
 #include "midi/MidiMessage.h"
+#include "Helpers.h"
 #include <QDebug>
 #include <QList>
 
@@ -13,83 +14,77 @@ namespace audio {
 
 class AudioNodeProcessor;
 
-class AudioNode : public QObject
+class AudioNode : public TaskObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(AudioNode)
 
 public:
-    AudioNode();
+    explicit AudioNode(int sampleRate);
     virtual ~AudioNode();
+    virtual void processReplacing(const SamplesBuffer &in, SamplesBuffer &out, std::vector<midi::MidiMessage> &midiBuffer);
+    virtual bool setSampleRate(int sampleRate);
 
-    virtual void processReplacing(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, std::vector<midi::MidiMessage> &midiBuffer);
-
-    virtual std::vector<midi::MidiMessage> pullMidiMessagesGeneratedByPlugins() const;
-
-    virtual void setMute(bool muted);
-
-    void setSolo(bool soloed);
-
+    int getID() const;
+    int getSampleRate() const;
+    bool isActivated() const;
     bool isMuted() const;
     bool isSoloed() const;
-
-    virtual bool connect(AudioNode &other);
-    virtual bool disconnect(AudioNode &otherNode);
-
-    virtual void addProcessor(const QSharedPointer<AudioNodeProcessor> &newProcessor, quint32 slotIndex);
-    void removeProcessor(const QSharedPointer<AudioNodeProcessor> &processor);
-    void suspendProcessors();
-    void resumeProcessors();
-    virtual void updateProcessorsGui();
-
-    void setGain(float gainValue);
-    void setBoost(float boostValue);
-
     float getBoost() const;
     float getGain() const;
-
-    void setPan(float pan);
     float getPan() const;
-
     AudioPeak getLastPeak() const;
 
-    void resetLastPeak();
+    void setMute(bool muted, void* sender = nullptr);
+    void setSolo(bool soloed, void* sender = nullptr);
+    void setGain(float gainValue, void* sender = nullptr);
+    void setBoost(float boostValue, void* sender = nullptr);
+    void setPan(float pan, void* sender = nullptr);
 
-    void setRmsWindowSize(int samples);
-
-    void deactivate();
-
-    void activate();
-
-    virtual bool isActivated() const;
-
-    virtual void reset(); // reset pan, gain, boost, etc
-
-    static const quint8 MAX_PROCESSORS_PER_TRACK = 4;
+public slots:
+    void setActivated(bool activated);
 
 protected:
-
+    inline virtual void pluginsProcess(audio::SamplesBuffer &in, audio::SamplesBuffer &out, std::vector<midi::MidiMessage> &midiBuffer) { Q_UNUSED(midiBuffer) out.set(in); }
     inline virtual void preFaderProcess(audio::SamplesBuffer &out){ Q_UNUSED(out) } // called after process all input and plugins, and just before compute gain, pan and boost.
     inline virtual void postFaderProcess(audio::SamplesBuffer &out){ Q_UNUSED(out) } // called after compute gain, pan and boost.
 
     int getInputResamplingLength(int sourceSampleRate, int targetSampleRate, int outFrameLenght);
 
-    QSet<AudioNode *> connections;
-    QSharedPointer<AudioNodeProcessor> processors[MAX_PROCESSORS_PER_TRACK];
     SamplesBuffer internalInputBuffer;
     SamplesBuffer internalOutputBuffer;
 
     mutable audio::AudioPeak lastPeak;
-    QMutex mutex; // used to protected connections manipulation because nodes can be added or removed by different threads
 
     // pan
     float pan;
     float leftGain;
     float rightGain;
 
-private:
-    AudioNode(const AudioNode &other);
-    AudioNode &operator=(const AudioNode &other);
+signals:
+    void gainChanged(float newGain, void* sender);
+    void panChanged(float newPan, void* sender);
+    void boostChanged(float newBoost, void* sender);
+    void muteChanged(bool muteStatus, void* sender);
+    void soloChanged(bool soloStatus, void* sender);
+    void audioPeakChanged(const audio::AudioPeak& audioPeak);
 
+    void postSetActivated(bool activated);
+    void postReset();
+    void postGain(float newGain, void* sender);
+    void postPan(float newPan, void* sender);
+    void postBoost(float newBoost, void* sender);
+    void postMute(bool muteStatus, void* sender);
+    void postSolo(bool soloStatus, void* sender);
+    void postResetLastPeak();
+
+protected slots:
+    virtual void reset(); // reset pan, gain, boost, etc
+    void resetLastPeak();
+
+private:
+    int id;
+    int sampleRate;
     bool muted;
     bool soloed;
 
@@ -100,29 +95,15 @@ private:
 
     static const double ROOT_2_OVER_2;
     static const double PI_OVER_2;
+    static QAtomicInt LAST_FREE_ID;
 
     double resamplingCorrection;
 
+    static int generateNodeId();
+
     void updateGains();
-
-signals:
-    void gainChanged(float newGain);
-    void panChanged(float newPan);
-    void boostChanged(float newBoost);
-    void muteChanged(bool muteStatus);
-    void soloChanged(bool soloStatus);
+    void setRmsWindowSize(int samples);
 };
-
-
-inline void AudioNode::deactivate()
-{
-    activated = false;
-}
-
-inline void AudioNode::activate()
-{
-    activated = true;
-}
 
 inline bool AudioNode::isActivated() const
 {
@@ -142,6 +123,16 @@ inline float AudioNode::getBoost() const
 inline float AudioNode::getGain() const
 {
     return gain;
+}
+
+inline int AudioNode::getID() const
+{
+    return id;
+}
+
+inline int AudioNode::getSampleRate() const
+{
+    return sampleRate;
 }
 
 inline bool AudioNode::isMuted() const

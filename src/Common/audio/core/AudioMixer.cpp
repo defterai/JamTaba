@@ -1,9 +1,6 @@
 #include "AudioMixer.h"
 #include "AudioNode.h"
 #include <QDebug>
-#include "Plugins.h"
-#include "midi/MidiDriver.h"
-#include <QMutexLocker>
 #include "log/Logging.h"
 
 using audio::AudioMixer;
@@ -11,21 +8,29 @@ using audio::AudioNode;
 using audio::SamplesBuffer;
 
 AudioMixer::AudioMixer(int sampleRate) :
-    sampleRate(sampleRate)
+    discardAudioBuffer(2),
+    sampleRate(sampleRate),
+    masterGain(1.0f),
+    applyGain(false)
 {
 
 }
 
-void AudioMixer::addNode(QSharedPointer<AudioNode> node)
+void AudioMixer::addNode(const QSharedPointer<AudioNode>& node)
 {
     nodes.append(node);
-    resamplers.insert(node, SamplesBufferResampler());
+    // make sure node sample rate match mixer
+    node->setSampleRate(sampleRate);
 }
 
-void AudioMixer::removeNode(QSharedPointer<AudioNode> node)
+void AudioMixer::removeNode(const QSharedPointer<AudioNode>& node)
 {
     nodes.removeOne(node);
-    resamplers.remove(node);
+}
+
+void AudioMixer::removeAllNodes()
+{
+    nodes.clear();
 }
 
 AudioMixer::~AudioMixer()
@@ -33,40 +38,54 @@ AudioMixer::~AudioMixer()
     qCDebug(jtAudio) << "Audio mixer destructor...";
 
     nodes.clear();
-    resamplers.clear();
 
     qCDebug(jtAudio) << "Audio mixer destructor finished!";
 }
 
-void AudioMixer::process(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, const std::vector<midi::MidiMessage> &midiBuffer, bool attenuateAfterSumming)
+bool AudioMixer::hasSoloedNode() const
 {
-    static int soloedBuffersInLastProcess = 0;
-    // --------------------------------------
-    bool hasSoloedBuffers = soloedBuffersInLastProcess > 0;
-    soloedBuffersInLastProcess = 0;
+    for (const auto& node : qAsConst(nodes)) {
+        if (node->isSoloed()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void AudioMixer::setSampleRate(int sampleRate)
+{
+    if (this->sampleRate != sampleRate) {
+        this->sampleRate = sampleRate;
+        for (const auto& node : qAsConst(nodes)) {
+            node->setSampleRate(sampleRate);
+        }
+    }
+}
+
+void AudioMixer::setMasterGain(float masterGain)
+{
+    this->masterGain = masterGain;
+    this->applyGain = !qFuzzyCompare(masterGain, 1.0f);
+}
+
+void AudioMixer::process(const SamplesBuffer &in, SamplesBuffer &out, const QVector<midi::MidiMessage> &midiBuffer)
+{
+    bool hasSoloedBuffers = hasSoloedNode();
     for (const auto& node : qAsConst(nodes)) {
         bool canProcess = (!hasSoloedBuffers && !node->isMuted()) || (hasSoloedBuffers && node->isSoloed());
         if (canProcess) {
-
             // each channel (not subchannel) will receive a full copy of incomming midi messages
             std::vector<midi::MidiMessage> midiMessages(midiBuffer.size());
             midiMessages.insert(midiMessages.begin(), midiBuffer.begin(), midiBuffer.end());
-
-            node->processReplacing(in, out, sampleRate, midiMessages);
+            node->processReplacing(in, out, midiMessages);
+        } else { // just discard the samples if node is muted, the internalBuffer is not copyed to out buffer
+            discardAudioBuffer.setFrameLenght(out.getFrameLenght());
+            node->processReplacing(in, discardAudioBuffer, discardMidiBuffer);
+            discardMidiBuffer.clear();
         }
-        else { // just discard the samples if node is muted, the internalBuffer is not copyed to out buffer
-            static audio::SamplesBuffer internalBuffer(2);
-            static std::vector<midi::MidiMessage> emptyMidiBuffer;
-            internalBuffer.setFrameLenght(out.getFrameLenght());
-            node->processReplacing(in, internalBuffer, sampleRate, emptyMidiBuffer);
-        }
-        if (node->isSoloed())
-            soloedBuffersInLastProcess++;
     }
 
-    if (attenuateAfterSumming) {
-        int nodesConnected = nodes.size();
-        if (nodesConnected > 1) // attenuate
-            out.applyGain(1.0/nodesConnected, 0.0);
+    if (applyGain) { // optimization to skip apply near 1.0 gain values
+        out.applyGain(masterGain, 1.0f); // using 1 as boost factor/multiplier (no boost)
     }
 }

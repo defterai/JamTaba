@@ -13,7 +13,7 @@ class LocalInputGroup
 {
 
 public:
-    LocalInputGroup(int groupIndex, QSharedPointer<audio::LocalInputNode> firstInput);
+    LocalInputGroup(int groupIndex);
     ~LocalInputGroup();
 
     bool isEmpty() const;

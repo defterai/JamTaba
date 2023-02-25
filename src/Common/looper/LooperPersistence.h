@@ -22,7 +22,6 @@ private:
     QString savePath;
     Looper *looper;
 
-    static QList<quint8> getLockedLayers(Looper *looper);
     static void saveSamplesToDisk(const QString &savePath, const QString &loopFileName, const SamplesBuffer &buffer, quint8 layerIndex, bool encodeInOggVorbis, float vorbisQuality, uint sampleRate, quint8 bitDepth);
 
     void saveJsonFile(const QString &loopFileName);

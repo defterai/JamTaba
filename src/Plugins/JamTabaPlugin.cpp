@@ -1,7 +1,9 @@
 #include "JamTabaPlugin.h"
 #include "MainControllerPlugin.h"
 #include "NinjamControllerPlugin.h"
+#include "audio/core/SamplesBuffer.h"
 #include "log/Logging.h"
+#include "Helpers.h"
 #include <QApplication>
 
 // anti troll scheme to avoid multiple connections in ninjam servers
@@ -16,8 +18,8 @@ bool JamTabaPlugin::pluginIsInitialized()
 JamTabaPlugin::JamTabaPlugin(quint8 inputChannels, quint8 outputChannels) :
     controller(nullptr),
     running(false),
-    inputBuffer(inputChannels),
-    outputBuffer(outputChannels),
+    inputBuffer(createQSharedPointer<audio::SamplesBuffer>(inputChannels)),
+    outputBuffer(createQSharedPointer<audio::SamplesBuffer>(outputChannels)),
     hostWasPlayingInLastAudioCallBack(false)
 {
     qCDebug(jtVstPlugin) << "Base Plugin constructor...";

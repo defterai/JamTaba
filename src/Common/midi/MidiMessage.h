@@ -2,6 +2,7 @@
 #define _MIDI_MESSAGE_
 
 #include <QtGlobal>
+#include <QObject>
 #include <vector>
 
 namespace midi {
@@ -22,7 +23,7 @@ public:
     bool isNoteOn() const;
     bool isNoteOff() const;
 
-    void transpose(qint8 semitones);
+    bool transpose(qint8 semitones);
 
     quint8 getNoteVelocity() const;
 
@@ -72,5 +73,7 @@ inline bool MidiMessage::isControl() const
 }
 
 } // namespace
+
+Q_DECLARE_METATYPE(midi::MidiMessage)
 
 #endif

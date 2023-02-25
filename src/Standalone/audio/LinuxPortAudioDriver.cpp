@@ -2,8 +2,6 @@
 #include "log/Logging.h"
 #include "pa_linux_alsa.h"
 
-using controller::MainController;
-
 namespace audio {
 
 void PortAudioDriver::preInitializePortAudioStream(PaStream *stream)

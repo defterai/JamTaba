@@ -10,7 +10,7 @@ void PluginFinder::finishScan()
     QProcess::ExitStatus exitStatus = scanProcess.exitStatus();
     if (exitStatus!= QProcess::ExitStatus::CrashExit) // do not try to close an already crashed exit process
         scanProcess.close();
-    bool exitingWithoutError = exitStatus == QProcess::NormalExit;
+    bool exitingWithoutError = exitStatus == QProcess::ExitStatus::NormalExit;
 
     qCDebug(jtStandalonePluginFinder) << "Closing scan process! exited without error:" << exitingWithoutError;
 
@@ -92,7 +92,7 @@ void PluginFinder::cancel()
 }
 
 QString PluginFinder::buildCommaSeparatedString(const QStringList &list) const
-{
+{    
     QString folderString;
     for (int c = 0; c < list.size(); ++c) {
         folderString += list.at(c);

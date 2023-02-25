@@ -1,4 +1,5 @@
 #include "Utils.h"
+#include <QFileInfo>
 
 static QString getVstPluginString(AEffect *plugin, VstInt32 opcode) {
     Q_ASSERT(plugin != nullptr);
@@ -21,10 +22,12 @@ QString vst::utils::getPluginName(AEffect *plugin)
     return getVstPluginString(plugin, effGetEffectName);
 }
 
-
 audio::PluginDescriptor vst::utils::createDescriptor(AEffect *plugin, const QString &pluginPath)
 {
     auto pluginName = vst::utils::getPluginName(plugin);
+    if (pluginName.isEmpty()) {
+        pluginName = QFileInfo(pluginPath).baseName();
+    }
     auto manufacturer = vst::utils::getPluginVendor(plugin);
     auto category = audio::PluginDescriptor::VST_Plugin;
     return audio::PluginDescriptor(pluginName, category, manufacturer, pluginPath);

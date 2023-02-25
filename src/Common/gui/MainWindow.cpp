@@ -21,6 +21,7 @@
 #include "Highligther.h"
 #include "NinjamController.h"
 #include "MainController.h"
+#include "controller/AudioController.h"
 #include "Utils.h" // TODO refactoring to AudioUtils.h and use namespace
 #include "GuiUtils.h"
 #include "BusyDialog.h"
@@ -52,10 +53,6 @@
 
 const QSize MainWindow::MAIN_WINDOW_MIN_SIZE = QSize(1100, 695);
 const QString MainWindow::NIGHT_MODE_SUFFIX = "_nm";
-
-const quint8 MainWindow::DEFAULT_REFRESH_RATE = 30; // in Hertz
-const quint8 MainWindow::MAX_REFRESH_RATE = 60; // in Hertz
-const quint8 MainWindow::MIN_REFRESH_RATE = 10; // in Hertz
 
 const quint32 MainWindow::DEFAULT_NETWORK_USAGE_UPDATE_PERIOD = 4000; // 4 seconds
 
@@ -91,9 +88,11 @@ MainWindow::MainWindow(MainController *mainController, QWidget *parent) :
     buttonCollapseBottomArea(nullptr),
     performanceMonitorLabel(nullptr),
     xmitInactivityDetector(nullptr),
-    screensaverBlocker(new ScreensaverBlocker()),
     usersColorsPool(new UsersColorsPool()),
+    screensaverBlocker(new ScreensaverBlocker()),
     mainChat(new MainChat()),
+    streamingBufferingPercentage(0),
+    streamingBuffering(false),
     ninjamWindow(nullptr),
     roomToJump(nullptr),
     performanceMonitor(new PerformanceMonitor()),
@@ -366,7 +365,7 @@ void MainWindow::changeCameraStatus(bool activated)
             auto channelIndex = secondChannel->getChannelIndex();
             auto voiceChatActivated = mainController->isVoiceChatActivated(channelIndex);
             if (voiceChatActivated) {
-                mainController->setVoiceChatStatus(channelIndex, false);
+                mainController->setVoiceChatActivated(channelIndex, false);
             }
 
             secondChannel->setAsVideoChannel();
@@ -446,16 +445,16 @@ QImage MainWindow::pickCameraFrame() const
 void MainWindow::initializeMeteringOptions()
 {
     const auto &settings = mainController->getSettings();
-    AudioSlider::setPaintMaxPeakMarker(settings.isShowingMaxPeaks());
-    quint8 meterOption = settings.getMeterOption();
+    AudioSlider::setPaintMaxPeakMarker(settings.meteringSettings.isShowingMaxPeakMarkers());
+    persistence::MeterMode meterOption = settings.meteringSettings.getOption();
     switch (meterOption) {
-    case 0:
+    case persistence::MeterMode::PeakAndRms:
         AudioSlider::paintPeaksAndRms();
         break;
-    case 1:
+    case persistence::MeterMode::PeakOnly:
         AudioSlider::paintPeaksOnly();
         break;
-    case 2:
+    case persistence::MeterMode::RmsOnly:
         AudioSlider::paintRmsOnly();
         break;
     }
@@ -640,11 +639,7 @@ void MainWindow::initializeLanguageMenu()
 
 void MainWindow::initializeGuiRefreshTimer()
 {
-    quint8 refreshRate = mainController->getSettings().getMeterRefreshRate();
-    if (refreshRate < MIN_REFRESH_RATE)
-        refreshRate = MIN_REFRESH_RATE;
-    else if (refreshRate > MAX_REFRESH_RATE)
-        refreshRate = MAX_REFRESH_RATE;
+    quint8 refreshRate = mainController->getSettings().meteringSettings.getRefreshRate();
 
     timerID = startTimer(1000/refreshRate); // timer used to animate audio peaks, midi activity, public room wave audio plot, etc.
 }
@@ -680,11 +675,11 @@ void MainWindow::initialize()
     // remember collapse status
     auto settings = mainController->getSettings();
 
-    if (settings.isRememberingLocalChannels())
-        showPeakMetersOnlyInLocalControls(settings.isLocalChannelsCollapsed());
+    if (settings.rememberSettings.isRememberLocalChannels())
+        showPeakMetersOnlyInLocalControls(settings.collapseSettings.isLocalChannelsCollapsed());
 
-    if (settings.isRememberingBottomSection())
-        setBottomCollapsedStatus(settings.isBottomSectionCollapsed());
+    if (settings.rememberSettings.isRememberBottomSection())
+        setBottomCollapsedStatus(settings.collapseSettings.isBottomSectionCollapsed());
 
     auto publicChatActivated = settings.publicChatIsActivated();
     createMainChat(publicChatActivated);
@@ -761,40 +756,6 @@ void MainWindow::toggleLocalTracksCollapseStatus()
     updateCollapseButtons();
 }
 
-persistence::LocalInputTrackSettings MainWindow::getInputsSettings() const
-{
-    LocalInputTrackSettings settings;
-    for (auto trackGroupView : localGroupChannels) {
-        Channel channel(trackGroupView->getInstrumentIcon());
-        int subchannelsCount = 0;
-        trackGroupView->visitTracks<LocalTrackView>([&](LocalTrackView *trackView) {
-            auto inputNode = trackView->getInputNode();
-            ChannelRange inputNodeRange = inputNode->getAudioInputRange();
-            int firstInput = inputNodeRange.getFirstChannel();
-            int channels = inputNodeRange.getChannels();
-            int midiDevice = inputNode->getMidiDeviceIndex();
-            int midiChannel = inputNode->getMidiChannelIndex();
-            float gain = Utils::poweredGainToLinear(inputNode->getGain());
-            float boost = Utils::linearToDb(inputNode->getBoost());
-            float pan = inputNode->getPan();
-            bool muted = inputNode->isMuted();
-            bool stereoInverted = inputNode->isStereoInverted();
-            qint8 transpose = inputNode->getTranspose();
-            quint8 lowerNote = inputNode->getMidiLowerNote();
-            quint8 higherNote = inputNode->getMidiHigherNote();
-            bool routindMidiInput = subchannelsCount > 0 && inputNode->isRoutingMidiInput(); // midi routing is not allowed in first subchannel
-
-            SubChannel sub(firstInput, channels, midiDevice, midiChannel, gain, boost, pan, muted, stereoInverted,
-                                                                    transpose, lowerNote, higherNote, routindMidiInput);
-            channel.subChannels.append(sub);
-
-            subchannelsCount++;
-        });
-        settings.channels.append(channel);
-    }
-    return settings;
-}
-
 void MainWindow::stopCurrentRoomStream()
 {
     if (mainController->isPlayingRoomStream()) {
@@ -819,10 +780,28 @@ void MainWindow::showMessageBox(const QString &title, const QString &text, QMess
     messageBox->exec();
 }
 
+void MainWindow::handlePublicRoomStreamState(bool streaming)
+{
+    if (!streaming) {
+        stopCurrentRoomStream();
+    }
+}
+
 void MainWindow::handlePublicRoomStreamError(const QString &msg)
 {
     stopCurrentRoomStream();
     showMessageBox(tr("Error!"), msg, QMessageBox::Critical);
+}
+
+void MainWindow::handlePublicRoomBufferingChanged(bool buffering, int percent)
+{
+    streamingBuffering = buffering;
+    streamingBufferingPercentage = percent;
+}
+
+void MainWindow::handlePublicRoomAudioPeakChanged(const audio::AudioPeak& audioPeak)
+{
+    streamingAudioPeak = audioPeak;
 }
 
 void MainWindow::removeChannelsGroup(int channelIndex)
@@ -862,12 +841,6 @@ void MainWindow::addChannelsGroup(int instrumentIndex)
 
     if (mainController->isPlayingInNinjamRoom()) {
         mainController->sendNewChannelsNames(getChannelsMetadata());
-
-        // create an encoder for this channel in next interval
-        bool voiceChannelActivated = mainController->isVoiceChatActivated(channelIndex);
-        auto ninjamController = mainController->getNinjamController();
-        ninjamController->scheduleEncoderChangeForChannel(channelIndex, voiceChannelActivated);
-
     }
     updateLocalInputChannelsGeometry();
 }
@@ -946,8 +919,10 @@ void MainWindow::loadPreset(const Preset &preset)
         initializeLocalInputChannels(preset.inputTrackSettings);
 
         //set all loaded channels xmit to ON
+
+        const auto& audioController = mainController->getAudioController();
         for (auto trackGroupView : qAsConst(localGroupChannels)) {
-            mainController->setTransmitingStatus(trackGroupView->getChannelIndex(), true);
+            emit audioController->postSetTransmitingStatus(trackGroupView->getChannelIndex(), true);
         }
 
         QApplication::processEvents();
@@ -956,7 +931,7 @@ void MainWindow::loadPreset(const Preset &preset)
 
 void MainWindow::removeAllInputLocalTracks()
 {
-    mainController->removeAllInputTracks();
+    emit mainController->getAudioController()->postRemoveAllInputTracks();
 
     while (!localGroupChannels.isEmpty()) {
         auto view = localGroupChannels.first();
@@ -970,52 +945,44 @@ void MainWindow::removeAllInputLocalTracks()
 // this function is overrided in MainWindowStandalone to load input selections and plugins
 void MainWindow::initializeLocalSubChannel(LocalTrackView *localTrackView, const SubChannel &subChannel)
 {
-    auto boostValue = BaseTrackView::intToBoostValue(subChannel.boost);
-    localTrackView->setInitialValues(subChannel.gain, boostValue, subChannel.pan, subChannel.muted, subChannel.stereoInverted);
+    localTrackView->setInitialValues(subChannel.getGain(), subChannel.getBoost(), subChannel.getPan(), subChannel.isMuted(), subChannel.isStereoInverted());
 }
 
-void MainWindow::openLooperWindow(uint trackID)
+void MainWindow::openLooperWindow(QSharedPointer<audio::LocalInputNode> inputNode)
 {
     Q_ASSERT(mainController);
 
-     auto inputTrack = mainController->getInputTrack(trackID);
-     if (inputTrack) {
-        auto looperWindow = looperWindows[trackID];
-        if (!looperWindow) {
-            looperWindow = new LooperWindow(this, mainController);
-            looperWindows.insert(trackID, looperWindow);
-            looperWindow->setTintColor(getTintColor());
-        }
+    auto looperWindow = looperWindows[inputNode->getID()];
+    if (!looperWindow) {
+        looperWindow = new LooperWindow(this, mainController);
+        looperWindows.insert(inputNode->getID(), looperWindow);
+        looperWindow->setTintColor(getTintColor());
+    }
 
-        looperWindow->setLooper(inputTrack->getLooper());
+    looperWindow->setLooper(inputNode->getLooper().data());
 
-        auto channel = localGroupChannels.at(inputTrack->getChanneGroupIndex());
-        Q_ASSERT(channel);
+    auto channel = localGroupChannels.at(inputNode->getChannelGroupIndex());
+    Q_ASSERT(channel);
 
-        int subchannelInternalIndex = channel->getSubchannelInternalIndex(trackID);
-        QString channelName = channel->getChannelGroupName();
-        if (channelName.isEmpty())
-            channelName = tr("Channel %1").arg(QString::number(channel->getChannelIndex() + 1));
-        else
-            channelName = tr("Channel %1").arg(channelName);
+    int subchannelInternalIndex = channel->getSubchannelInternalIndex(inputNode->getID());
+    QString channelName = channel->getChannelGroupName();
+    if (channelName.isEmpty())
+        channelName = tr("Channel %1").arg(QString::number(channel->getChannelIndex() + 1));
+    else
+        channelName = tr("Channel %1").arg(channelName);
 
-        QString subchannelName("Subchannel " + QString::number(subchannelInternalIndex + 1));
-        QString windowTitle("Looper - " + channelName + " (" + subchannelName + ")");
-        looperWindow->setWindowTitle(windowTitle);
+    QString subchannelName("Subchannel " + QString::number(subchannelInternalIndex + 1));
+    QString windowTitle("Looper - " + channelName + " (" + subchannelName + ")");
+    looperWindow->setWindowTitle(windowTitle);
 
-        looperWindow->raise();
-        looperWindow->show();
-        looperWindow->activateWindow();
-
-     }
-     else {
-         qCritical() << "inputTrack or ninjamControler are null";
-     }
+    looperWindow->raise();
+    looperWindow->show();
+    looperWindow->activateWindow();
 }
 
 void MainWindow::initializeLocalInputChannels()
 {
-    initializeLocalInputChannels(mainController->getSettings().getInputsSettings());
+    initializeLocalInputChannels(mainController->getSettings().inputsSettings);
 }
 
 void MainWindow::initializeLocalInputChannels(const LocalInputTrackSettings &inputsSettings)
@@ -1023,16 +990,16 @@ void MainWindow::initializeLocalInputChannels(const LocalInputTrackSettings &inp
     QApplication::setOverrideCursor(Qt::WaitCursor); // this line was hanging/freezing in Mac
 
     int channelIndex = 0;
-    for (const auto &channel : inputsSettings.channels) {
+    for (const auto &channel : inputsSettings.getChannels()) {
 
         // just a temporary workaround to https://github.com/elieserdejesus/JamTaba/issues/1104
-        if(channelIndex > 0 && channel.instrumentIndex == static_cast<int>(InstrumentIndex::Video))
+        if(channelIndex > 0 && channel.getInstrumentIndex() == static_cast<int>(InstrumentIndex::Video))
             continue; // skip this channel, it's a video channel used in the last session
 
         qCDebug(jtGUI) << "\tCreating channel "<< channelIndex;
-        bool createFirstSubChannel = channel.subChannels.isEmpty();
-        auto channelView = addLocalChannel(channelIndex, channel.instrumentIndex, createFirstSubChannel);
-        for (const auto &subChannel : channel.subChannels) {
+        bool createFirstSubChannel = channel.getSubChannels().isEmpty();
+        auto channelView = addLocalChannel(channelIndex, channel.getInstrumentIndex(), createFirstSubChannel);
+        for (const auto &subChannel : channel.getSubChannels()) {
             qCDebug(jtGUI) << "\t\tCreating sub-channel ";
             auto subChannelView = channelView->addTrackView(channelIndex);
             initializeLocalSubChannel(subChannelView, subChannel);
@@ -1376,7 +1343,8 @@ void MainWindow::enterInRoom(const login::RoomInfo &roomInfo)
     createNinjamServerChat(serverName);
 
     auto settings = mainController->getSettings();
-    ui.chatTabWidget->collapse(settings.isRememberingChatSection() && settings.isChatSectionCollapsed());
+    ui.chatTabWidget->collapse(settings.rememberSettings.isRememberChatSection() &&
+                               settings.collapseSettings.isChatSectionCollapsed());
 
     addNinjamPanelsInBottom();
 
@@ -2113,7 +2081,7 @@ void MainWindow::exitFromRoom(bool normalDisconnection, QString disconnectionMes
 
     for (LocalTrackGroupView *trackGroup : qAsConst(localGroupChannels)) {
         trackGroup->visitTracks<LocalTrackView>([&](LocalTrackView *trackView) {
-            trackView->getInputNode()->stopLooper();
+            trackView->getInputNode()->getLooper()->stop();
         });
     }
 
@@ -2196,14 +2164,11 @@ void MainWindow::timerEvent(QTimerEvent *)
         auto roomID = mainController->getCurrentStreamingRoomID();
         JamRoomViewPanel *roomView = roomViewPanels[roomID];
         if (roomView) {
-            bool buffering = mainController->getRoomStreamer()->isBuffering();
-            roomView->setShowBufferingState(buffering);
-            if (!buffering) {
-                auto peak = mainController->getRoomStreamPeak();
-                roomView->addPeak(peak.getMaxPeak());
+            roomView->setShowBufferingState(streamingBuffering);
+            if (streamingBuffering) {
+                roomView->setBufferingPercentage(streamingBufferingPercentage);
             } else {
-                int percentage = mainController->getRoomStreamer()->getBufferingPercentage();
-                roomView->setBufferingPercentage(percentage);
+                roomView->addPeak(streamingAudioPeak.getMaxPeak());
             }
         }
     }
@@ -2216,7 +2181,6 @@ void MainWindow::timerEvent(QTimerEvent *)
     }
 
     // update master peaks
-    auto masterPeak = mainController->getMasterPeak();
     ui.masterFader->setPeak(masterPeak.getLeftPeak(), masterPeak.getRightPeak(),
                             masterPeak.getLeftRMS(), masterPeak.getRightRMS());
 
@@ -2335,9 +2299,6 @@ MainWindow::~MainWindow()
     if (mainController)
         mainController->stop();
 
-    for (LocalTrackGroupView *groupView : qAsConst(this->localGroupChannels))
-        groupView->detachMainControllerInSubchannels();
-
     mainController = nullptr;
 
     killTimer(timerID);
@@ -2345,8 +2306,8 @@ MainWindow::~MainWindow()
     qCDebug(jtGUI) << "MainWindow destructor finished.";
 }
 
-void MainWindow::connectInPrivateServer(const QString &server, int serverPort,
-                                            const QString &userName, const QString &password)
+void MainWindow::connectInPrivateServer(const QString &server, quint16 serverPort,
+                                        const QString &userName, const QString &password)
 {
     mainController->storePrivateServerSettings(server, serverPort, password);
     mainController->setUserName(userName);
@@ -2405,7 +2366,8 @@ void MainWindow::showPrivateServerWindow()
 
 void MainWindow::showConnectWithPrivateServerDialog()
 {
-    auto privateServerDialog = new PrivateServerDialog(ui.centralWidget, mainController);
+    const auto& privateServerSettings = mainController->getSettings().privateServerSettings;
+    auto privateServerDialog = new PrivateServerDialog(ui.centralWidget, privateServerSettings, mainController->getUserName());
 
     connect(privateServerDialog, &PrivateServerDialog::connectionAccepted, this, &MainWindow::connectInPrivateServer);
 
@@ -2558,11 +2520,11 @@ void MainWindow::handleMenuMeteringAction(QAction *action)
             AudioSlider::paintRmsOnly();
         }
     }
-    quint8 meterOption = 0; // rms + peaks
+    persistence::MeterMode meterOption = persistence::MeterMode::PeakAndRms;
     if (AudioSlider::isPaintingPeaksOnly())
-        meterOption = 1;
+        meterOption = persistence::MeterMode::PeakOnly;
     else if (AudioSlider::isPaintingRmsOnly())
-        meterOption = 2;
+        meterOption = persistence::MeterMode::RmsOnly;
 
     mainController->storeMeteringSettings(AudioSlider::isPaintintMaxPeakMarker(), meterOption);
 }
@@ -2632,7 +2594,7 @@ void MainWindow::initializeWindowSize()
     setMinimumSize(getMinimumWindowSize());
 
     if (!isMaximized() && !isFullScreen()) {
-        QSize lastSize = mainController->getSettings().getLastWindowSize();
+        QSize lastSize = mainController->getSettings().windowSettings.getSize();
         QSize newSize = getSanitizedWindowSize(lastSize, minimumSize());
         resize(newSize);
         showNormal();
@@ -2678,22 +2640,17 @@ void MainWindow::resetLocalChannels()
 
 void MainWindow::setTransmitingStatus(int channelID, bool xmitStatus)
 {
-    mainController->setTransmitingStatus(channelID, xmitStatus);
+    emit mainController->getAudioController()->postSetTransmitingStatus(channelID, xmitStatus);
 }
 
 void MainWindow::setVoiceChatStatus(int channelID, bool voiceChatStatus)
 {
-    mainController->setVoiceChatStatus(channelID, voiceChatStatus);
+    mainController->setVoiceChatActivated(channelID, voiceChatStatus);
 
     if (mainController->isPlayingInNinjamRoom()) {
         auto ninjamService = mainController->getNinjamService();
         ninjamService->sendNewChannelsListToServer(getChannelsMetadata());
     }
-}
-
-bool MainWindow::isTransmiting(int channelID) const
-{
-    return mainController->isTransmiting(channelID);
 }
 
 void MainWindow::showJamtabaCurrentVersion()
@@ -2717,8 +2674,8 @@ void MainWindow::showJamtabaCurrentVersion()
 
 void MainWindow::setMasterGain(int faderPosition)
 {
-    float newGain = faderPosition/100.0;
-    mainController->setMasterGain(newGain);
+    float newGain = faderPosition / 100.0f;
+    emit mainController->getAudioController()->postSetMasterGain(newGain);
 }
 
 ChordsPanel *MainWindow::createChordsPanel()
@@ -2868,8 +2825,8 @@ void MainWindow::setupWidgets()
 
     // remember chat collapse status
     auto settings = mainController->getSettings();
-    if (settings.isRememberingChatSection()) {
-        ui.chatTabWidget->collapse(settings.isChatSectionCollapsed());
+    if (settings.rememberSettings.isRememberChatSection()) {
+        ui.chatTabWidget->collapse(settings.collapseSettings.isChatSectionCollapsed());
     }
 }
 
@@ -2897,7 +2854,11 @@ void MainWindow::setupSignals()
 
     connect(ui.localControlsCollapseButton, &QPushButton::clicked, this, &MainWindow::toggleLocalTracksCollapseStatus);
 
+    connect(mainController->getRoomStreamer(), &AbstractMp3Streamer::audioPeakChanged, this, &MainWindow::handlePublicRoomAudioPeakChanged);
     connect(mainController->getRoomStreamer(), &AbstractMp3Streamer::error, this, &MainWindow::handlePublicRoomStreamError);
+    connect(mainController->getRoomStreamer(), &AbstractMp3Streamer::stateChanged, this, &MainWindow::handlePublicRoomStreamState);
+    connect(mainController->getRoomStreamer(), &AbstractMp3Streamer::bufferingChanged, this, &MainWindow::handlePublicRoomBufferingChanged);
+
 
     connect(ui.masterFader, &QSlider::valueChanged, this, &MainWindow::setMasterGain);
 
@@ -2910,6 +2871,10 @@ void MainWindow::setupSignals()
     connect(mainController, &MainController::userBlockedInChat, this, &MainWindow::showFeedbackAboutBlockedUserInChat);
     connect(mainController, &MainController::userUnblockedInChat, this, &MainWindow::showFeedbackAboutUnblockedUserInChat);
 
+    const auto audioController = mainController->getAudioController();
+
+    connect(audioController.get(), &controller::AudioController::masterPeakChanged, this, &MainWindow::updateMasterPeak);
+
     ui.contentTabWidget->installEventFilter(this);
 
 }
@@ -2920,6 +2885,11 @@ void MainWindow::updateUserName()
     mainController->setUserName(newUserName);
 
     mainChat->setUserName(mainController->getUserName());
+}
+
+void MainWindow::updateMasterPeak(const audio::AudioPeak& masterPeak)
+{
+    this->masterPeak = masterPeak;
 }
 
 void MainWindow::initializeMasterFader()

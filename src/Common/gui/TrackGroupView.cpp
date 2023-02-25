@@ -142,7 +142,7 @@ TrackGroupView::~TrackGroupView()
 BaseTrackView *TrackGroupView::addTrackView(long trackID)
 {
     BaseTrackView* newTrackView = createTrackView(trackID); // this is a factory method and is overrided in some places
-    if (tracksLayout) {
+    if (tracksLayout && newTrackView) {
         tracksLayout->addWidget(newTrackView);
         trackViews.append(newTrackView);
 

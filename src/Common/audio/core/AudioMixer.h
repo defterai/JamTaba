@@ -1,12 +1,11 @@
 #ifndef AUDIO_MIXER_H
 #define AUDIO_MIXER_H
 
+#include <vector>
 #include <QList>
-#include <QMutex>
-#include <QMap>
-#include <QScopedPointer>
+#include <QVector>
 #include <QSharedPointer>
-#include "audio/SamplesBufferResampler.h"
+#include "audio/core/SamplesBuffer.h"
 
 namespace midi {
 class MidiMessage;
@@ -15,34 +14,43 @@ class MidiMessage;
 namespace audio {
 
 class AudioNode;
-class SamplesBuffer;
 class LocalInputNode;
 
-class AudioMixer
+class AudioMixer final
 {
-
-private:
-    AudioMixer(const AudioMixer &other);
+    Q_DISABLE_COPY_MOVE(AudioMixer);
 
 public:
     explicit AudioMixer(int sampleRate);
     ~AudioMixer();
-    void process(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, const std::vector<midi::MidiMessage> &midiBuffer, bool attenuateAfterSumming = false);
-    void addNode(QSharedPointer<AudioNode> node);
-    void removeNode(QSharedPointer<AudioNode> node);
-
-    void setSampleRate(int newSampleRate);
+    void process(const SamplesBuffer &in, SamplesBuffer &out, const QVector<midi::MidiMessage> &midiBuffer);
+    void addNode(const QSharedPointer<AudioNode>& node);
+    void removeNode(const QSharedPointer<AudioNode>& node);
+    void removeAllNodes();
+    int getSampleRate() const;
+    float getMasterGain() const;
+    void setSampleRate(int sampleRate);
+    void setMasterGain(float masterGain);
 
 private:
     QList<QSharedPointer<AudioNode>> nodes;
+    audio::SamplesBuffer discardAudioBuffer;
+    std::vector<midi::MidiMessage> discardMidiBuffer;
     int sampleRate;
-    QMap<QSharedPointer<AudioNode>, SamplesBufferResampler> resamplers;
+    float masterGain;
+    bool applyGain;
 
+    bool hasSoloedNode() const;
 };
 
-inline void AudioMixer::setSampleRate(int newSampleRate)
+inline int AudioMixer::getSampleRate() const
 {
-    sampleRate = newSampleRate;
+    return sampleRate;
+}
+
+inline float AudioMixer::getMasterGain() const
+{
+    return masterGain;
 }
 
 } // namespace

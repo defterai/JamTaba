@@ -1,6 +1,7 @@
 #include "LocalTrackGroupViewStandalone.h"
 #include "LocalTrackViewStandalone.h"
 #include "MainWindowStandalone.h"
+#include "audio/core/AudioNode.h"
 #include "audio/core/LocalInputNode.h"
 
 LocalTrackGroupViewStandalone::LocalTrackGroupViewStandalone(int index, MainWindowStandalone *mainWindow) :
@@ -52,7 +53,7 @@ LocalTrackViewStandalone* LocalTrackGroupViewStandalone::createTrackView(long tr
 {
     auto controller = dynamic_cast<MainWindowStandalone *>(mainWindow)->getMainController();
 
-    auto trackView = new LocalTrackViewStandalone(controller, trackID );
+    auto trackView = new LocalTrackViewStandalone(controller, controller->createInputNode(trackID));
 
     connect(trackView, &LocalTrackViewStandalone::trackInputChanged, this, &LocalTrackGroupViewStandalone::repaintLocalTracks);
 

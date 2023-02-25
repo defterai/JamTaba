@@ -229,7 +229,7 @@ public:
 
     void appendLocalUserVideo(const QByteArray &encodedVideo, bool isFirstPartOfInterval);
 
-    void addRemoteUserAudio(const QString &userName, const QByteArray &encodedAudio, quint8 channelIndex);
+    void addRemoteUserAudio(const QString &userName, const QSharedPointer<QByteArray>& encodedAudio, quint8 channelIndex);
     void startRecording(const QString &localUser, const QDir &recordBasePath, int bpm, int bpi, int sampleRate);
 
     // these methods start a new recording

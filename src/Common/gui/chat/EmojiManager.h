@@ -35,12 +35,14 @@ class EmojiManager : public Emojifier
 public:
 
     static const uint ICONS_SIZE;
+    static const QString CATEGORY_RECENT;
+    static const QString CATEGORY_SMILEYS_PEOPLE;
 
     EmojiManager(const QString &emojisJsonPath, const QString &emojiIconsPath);
 
     QList<Emoji> getByCategory(const QString  &category) const;
     Emoji getByCode(uint emojiCode) const;
-    QStringList getCategories() const;
+    const QStringList& getCategories() const;
 
     bool codeIsEmoji(uint code) const;
     QString emojify(const QString &string) override;
@@ -54,7 +56,7 @@ public:
 
     void addRecent(const QString &emojiCode);
     bool hasRecents() const;
-    QStringList getRecents() const;
+    const QStringList& getRecents() const;
 
 private:
 
@@ -75,7 +77,7 @@ private:
 
 };
 
-inline QStringList EmojiManager::getRecents() const
+inline const QStringList& EmojiManager::getRecents() const
 {
     return recents;
 }

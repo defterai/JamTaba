@@ -2,31 +2,35 @@
 #include "LooperStates.h"
 #include "LooperLayer.h"
 #include "Utils.h"
+#include "persistence/LooperSettings.h"
 
 #include <QDebug>
 
 #include <cstring>
 #include <vector>
 #include <QThread>
+#include <QRandomGenerator>
 
 using audio::Looper;
 using audio::AudioPeak;
 using audio::SamplesBuffer;
 using audio::LooperState;
+using persistence::LooperMode;
 
 Looper::Looper()
-    : Looper(Mode::Sequence, 4) // calling overloaded constructor
+    : Looper(LooperMode::Sequence, 4) // calling overloaded constructor
 {
 
 }
 
-Looper::Looper(Looper::Mode initialMode, quint8 maxLayers) :
+Looper::Looper(LooperMode initialMode, quint8 maxLayers) :
     intervalLenght(0),
     intervalPosition(0),
     changed(false),
     loading(false),
     waitingToStop(false),
     activated(true),
+    layers(persistence::LooperSettings::MAX_LAYERS_COUNT),
     currentLayerIndex(0),
     focusedLayerIndex(0),
     maxLayers(maxLayers),
@@ -37,12 +41,11 @@ Looper::Looper(Looper::Mode initialMode, quint8 maxLayers) :
     mode(initialMode)
 {
     // initialize
-    for (int l = 0; l < MAX_LOOP_LAYERS; ++l) { // create all possible layers
-        layers[l] = new LooperLayer();
+    for (int l = 0; l < persistence::LooperSettings::MAX_LAYERS_COUNT; ++l) { // create all possible layers
+        layers[l].reset(new LooperLayer());
     }
 
-    Looper::Mode modes[] = {Looper::Sequence, Looper::AllLayers, Looper::SelectedLayer};
-    for (Looper::Mode mode : modes) {
+    for (LooperMode mode : persistence::LooperSettings::LOOPER_MODES) {
         modeOptions[mode].recordingOptions = getDefaultSupportedRecordingOptions(mode);
         modeOptions[mode].playingOptions = getDefaultSupportedPlayingOptions(mode);
     }
@@ -57,7 +60,7 @@ void Looper::waitToStopInNextInterval()
 
 void Looper::nextMuteState(quint8 layer) // called when 'mute button' is clicked
 {
-    bool canMute = layer < maxLayers && mode == Looper::AllLayers;
+    bool canMute = layer < maxLayers && mode == LooperMode::AllLayers;
     if (canMute) {
         const LooperLayer::MuteState currentState = layers[layer]->getMuteState();
         LooperLayer::MuteState newMuteState = currentState;
@@ -144,12 +147,7 @@ void Looper::resetLayersContent()
 
 Looper::~Looper()
 {
-    for (int l = 0; l < MAX_LOOP_LAYERS; ++l) {
-        if (layers[l])
-            delete layers[l];
 
-        layers[l] = nullptr;
-    }
 }
 
 void Looper::setLayerGain(quint8 layerIndex, float gain)
@@ -187,7 +185,7 @@ void Looper::incrementLockedLayer()
     if (getLockedLayers() > 0) {
         do {
             if (isRandomizing)
-                nextLayer = qrand() % maxLayers;
+                nextLayer = QRandomGenerator::global()->generate() % maxLayers;
             else
                 nextLayer = (nextLayer + 1) % maxLayers;
         }
@@ -209,7 +207,7 @@ void Looper::incrementCurrentLayer()
 
     quint8 nextLayer = currentLayerIndex;
     if (isRandomizing && maxLayers > 1)
-        nextLayer = qrand() % maxLayers;
+        nextLayer = QRandomGenerator::global()->generate() % maxLayers;
     else
         nextLayer = (nextLayer + 1) % maxLayers;
 
@@ -293,7 +291,7 @@ void Looper::startRecording()
         if (!isOverdubbing) // avoid discard layer content if is overdubbing
             layers[currentLayerIndex]->zero();
 
-        setState(new RecordingState(this, firstRecordingLayer));
+        setState(new RecordingState(firstRecordingLayer));
     }
 }
 
@@ -306,7 +304,7 @@ void Looper::toggleRecording()
         quint8 startFrom = (focusedLayerIndex >= 0) ? focusedLayerIndex : currentLayerIndex;
         int firstRecordingLayer = getFirstUnlockedLayerIndex(startFrom);
         if (firstRecordingLayer >= 0) {
-            setState(new WaitingToRecordState(this));
+            setState(new WaitingToRecordState());
             setCurrentLayer(firstRecordingLayer);
         }
         else {
@@ -336,9 +334,9 @@ void Looper::stop()
 
 void Looper::play()
 {
-    setState(new PlayingState(this));
+    setState(new PlayingState());
 
-    if (mode == Looper::Sequence && focusedLayerIndex >= 0) {
+    if (mode == LooperMode::Sequence && focusedLayerIndex >= 0) {
         currentLayerIndex = focusedLayerIndex;
     }
 }
@@ -386,12 +384,12 @@ void Looper::selectLayer(quint8 layerIndex)
         bool canSelectLayer = true;
 
         // locked layers can't be focused while playing, except in SelectedLayer mode
-        if (isPlaying() && layerIsLocked(layerIndex) && mode != Looper::SelectedLayer) {
+        if (isPlaying() && layerIsLocked(layerIndex) && mode != LooperMode::SelectedLayer) {
             canSelectLayer = false;
         }
 
         if (canSelectLayer) {
-            if (mode == Looper::SelectedLayer || isStopped()) {
+            if (mode == LooperMode::SelectedLayer || isStopped()) {
                 setCurrentLayer(layerIndex);
             }
 
@@ -416,8 +414,8 @@ void Looper::setLayers(quint8 maxLayers, bool processChangeRequestNow)
     if (maxLayers < 1) {
         maxLayers = 1;
     }
-    else if (maxLayers > MAX_LOOP_LAYERS) {
-        maxLayers = MAX_LOOP_LAYERS;
+    else if (maxLayers > persistence::LooperSettings::MAX_LAYERS_COUNT) {
+        maxLayers = persistence::LooperSettings::MAX_LAYERS_COUNT;
     }
 
     newMaxLayersRequested = maxLayers; // schedule the max layer change to next process
@@ -482,7 +480,7 @@ void Looper::addBuffer(const SamplesBuffer &samples)
         return;
 
     uint samplesToProcess = qMin(samples.getFrameLenght(), intervalLenght - intervalPosition);
-    state->addBuffer(samples, samplesToProcess);
+    state->addBuffer(this, samples, samplesToProcess);
 }
 
 void Looper::mixToBuffer(SamplesBuffer &samples)
@@ -492,7 +490,7 @@ void Looper::mixToBuffer(SamplesBuffer &samples)
 
     uint samplesToProcess = qMin(samples.getFrameLenght(), intervalLenght - intervalPosition);
     AudioPeak peakBeforeMix = samples.computePeak();
-    state->mixTo(samples, samplesToProcess);
+    state->mixTo(this, samples, samplesToProcess);
 
     AudioPeak peakAfterMix = samples.computePeak();
 
@@ -526,7 +524,7 @@ void Looper::processChangeRequests()
             focusedLayerIndex = -1;
 
         if (currentLayerIndex >= maxLayers) { // currentLayer is not valid in new maxLayers?
-            if (mode == Looper::Mode::Sequence) {
+            if (mode == LooperMode::Sequence) {
                 incrementCurrentLayer();
             }
             else {
@@ -552,10 +550,10 @@ void Looper::startNewCycle(uint samplesInCycle)
     intervalPosition = 0;
 
     bool isOverdubbing = getOption(Looper::Overdub);
-    for (quint8 l = 0; l < MAX_LOOP_LAYERS; ++l) {
+    for (quint8 l = 0; l < persistence::LooperSettings::MAX_LAYERS_COUNT; ++l) {
         layers[l]->prepareForNewCycle(samplesInCycle, isOverdubbing);
 
-        bool canMute = l < maxLayers && mode == Looper::AllLayers;
+        bool canMute = l < maxLayers && mode == LooperMode::AllLayers;
         if (canMute) {
             LooperLayer::MuteState currentMuteState = layers[l]->getMuteState();
             if (currentMuteState == LooperLayer::WaitingToMute || currentMuteState == LooperLayer::WaitingToUnmute)
@@ -563,7 +561,7 @@ void Looper::startNewCycle(uint samplesInCycle)
         }
     }
 
-    state->handleNewCycle(samplesInCycle);
+    state->handleNewCycle(this, samplesInCycle);
 }
 
 void Looper::setState(LooperState *newState)
@@ -580,7 +578,7 @@ void Looper::setState(LooperState *newState)
  */
 bool Looper::canRecord() const
 {
-    if (mode != Looper::SelectedLayer)
+    if (mode != LooperMode::SelectedLayer)
         return getFirstUnlockedLayerIndex() >= 0;
 
     return !layers[currentLayerIndex]->isLocked(); // in SELECTED_LAYER_ONLY mode we can't allow recording in selected layer if this layer is locked
@@ -589,14 +587,13 @@ bool Looper::canRecord() const
 const std::vector<float> Looper::getLayerPeaks(quint8 layerIndex, uint samplesPerPeak) const
 {
     if (layerIndex < maxLayers) {
-        LooperLayer *layer = layers[layerIndex];
-        return layer->getSamplesPeaks(samplesPerPeak);
+        return layers[layerIndex]->getSamplesPeaks(samplesPerPeak);
     }
 
     return std::vector<float>(); // empty vector
 }
 
-void Looper::setMode(Mode mode)
+void Looper::setMode(LooperMode mode)
 {
     if (this->mode != mode) {
         this->mode = mode;
@@ -614,7 +611,7 @@ void Looper::mixLayer(quint8 layerIndex, SamplesBuffer &samples, uint samplesToM
     if (layerIndex >= maxLayers)
         return;
 
-    LooperLayer *loopLayer = layers[layerIndex];
+    auto& loopLayer = layers[layerIndex];
     samplesToMix = qMin(samplesToMix, loopLayer->getAvailableSamples());
     if (samplesToMix) {
         loopLayer->mixTo(samples, samplesToMix, intervalPosition, mainGain); // mix buffered samples
@@ -644,15 +641,18 @@ void Looper::processBufferUsingCurrentLayerSettings(SamplesBuffer &buffer)
     buffer.applyGain(layerGain * mainGain, leftGain, rightGain, 1.0);
 }
 
-QString Looper::getModeString(Mode mode)
+QString Looper::getModeString(LooperMode mode)
 {
     switch (mode) {
-        case Mode::Sequence:       return tr("Sequence");
-        case Mode::AllLayers:      return tr("All Layers");
-        case SelectedLayer:        return tr("Selected Layer");
+    case LooperMode::Sequence:
+        return tr("Sequence");
+    case LooperMode::AllLayers:
+        return tr("All Layers");
+    case LooperMode::SelectedLayer:
+        return tr("Selected Layer");
+    default:
+        return "Error";
     }
-
-    return "Error";
 }
 
 bool Looper::isWaitingToRecord() const
@@ -675,12 +675,12 @@ bool Looper::isStopped() const
     return state->isStopped();
 }
 
-QMap<Looper::RecordingOption, bool> Looper::getDefaultSupportedRecordingOptions(Looper::Mode mode)
+QMap<Looper::RecordingOption, bool> Looper::getDefaultSupportedRecordingOptions(LooperMode mode)
 {
     QMap<Looper::RecordingOption, bool> options;
     options[Looper::Overdub] = false;
 
-    if (mode == Looper::Sequence || mode == Looper::SelectedLayer) {
+    if (mode == LooperMode::Sequence || mode == LooperMode::SelectedLayer) {
         options[Looper::HearAllLayers] = false;
     }
 
@@ -694,22 +694,22 @@ void Looper::setLoopName(const QString loopName)
     emit currentLoopNameChanged(loopName);
 }
 
-QMap<Looper::PlayingOption, bool> Looper::getDefaultSupportedPlayingOptions(Looper::Mode mode)
+QMap<Looper::PlayingOption, bool> Looper::getDefaultSupportedPlayingOptions(LooperMode mode)
 {
     QMap<Looper::PlayingOption, bool> options;
 
-    if (mode == Looper::Sequence) {
+    if (mode == LooperMode::Sequence) {
         options[Looper::PlayLockedLayers] = false;
         options[Looper::RandomizeLayers] = false;
         options[Looper::PlayNonEmptyLayers] = true;
     }
 
-    if (mode == Looper::AllLayers) {
+    if (mode == LooperMode::AllLayers) {
         options[Looper::PlayLockedLayers] = false;
         options[Looper::PlayNonEmptyLayers] = true;
     }
 
-    if (mode == Looper::SelectedLayer) {
+    if (mode == LooperMode::SelectedLayer) {
         options[Looper::PlayLockedLayers] = false;
     }
 

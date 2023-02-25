@@ -1,19 +1,21 @@
 #include "LooperWavePanel.h"
 #include "looper/Looper.h"
+#include "persistence/MeteringSettings.h"
+#include "persistence/LooperSettings.h"
 
 #include <QKeyEvent>
 #include <QMimeData>
 
 LooperWavePanel::LooperWavePanel(audio::Looper *looper, quint8 layerIndex) :
       beatsPerInterval(16),
+      samplesPerInterval(0),
+      samplesPerPixel(0),
       lastMaxPeak(0),
       accumulatedSamples(0),
-      samplesPerPixel(0),
-      samplesPerInterval(0),
       looper(looper),
       layerID(layerIndex)
 {
-   setDrawingMode(WavePeakPanel::SOUND_WAVE);
+   setDrawingMode(persistence::WaveDrawingMode::SoundWave);
    this->useAlphaInPreviousSamples = false; // all samples are painted without alpha
 
    const qreal rightMargin = 3.0;
@@ -150,7 +152,7 @@ bool LooperWavePanel::canUseHighlightPainting() const
     const bool drawingCurrentLayer = looper->getCurrentLayerIndex() == layerID;
 
     if (looper->isPlaying() || looper->isRecording()) {
-        return drawingCurrentLayer || looper->getMode() == audio::Looper::AllLayers;
+        return drawingCurrentLayer || looper->getMode() == persistence::LooperMode::AllLayers;
     }
     else if (looper->isStopped()) {
         return drawingCurrentLayer;

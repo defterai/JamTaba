@@ -15,7 +15,7 @@ using vorbis::Decoder;
 Decoder::Decoder() :
       internalBuffer(2, 4096),
       initialized(false),
-      vorbisInput()
+      vorbisInputOffset(0)
 {
     vorbisFile.vi = nullptr;
 }
@@ -54,14 +54,39 @@ int Decoder::getSampleRate() const
 
 
 //+++++++++++++++++++++++++++++++++++++++++++
-size_t Decoder::consumeTo(void *oggOutBuffer, size_t bytesToConsume){
-    size_t len = qMin( bytesToConsume, (size_t)vorbisInput.size());
-    if (len > 0) {
-        memcpy(oggOutBuffer, vorbisInput.data(), len);
-        vorbisInput.remove(0, (uint)len);
-    }
+size_t Decoder::consumeTo(void *oggOutBuffer, size_t bytesToConsume) {
+    size_t consumedBytes = 0;
+    QMutexLocker locker(&mutex);
+    while (consumedBytes < bytesToConsume && !vorbisInputs.isEmpty()) {
+        const auto& buffer = vorbisInputs.front();
+        if (buffer->isEmpty() || (vorbisInputOffset >= buffer->size())) {
+            // should not happened just to be safe
+            vorbisInputOffset = 0;
+            vorbisInputs.pop_front();
+            continue;
+        }
 
-    return len;
+        size_t len = qMin(bytesToConsume - consumedBytes, (size_t)(buffer->size() - vorbisInputOffset));
+        memcpy(reinterpret_cast<quint8*>(oggOutBuffer) + consumedBytes, buffer->data() + vorbisInputOffset, len);
+        consumedBytes += len;
+        vorbisInputOffset += len;
+        if (vorbisInputOffset >= buffer->size()) {
+            vorbisInputOffset = 0;
+            vorbisInputs.pop_front();
+        }
+    }
+    return consumedBytes;
+}
+
+size_t Decoder::getInputSize() const
+{
+    QMutexLocker locker(&mutex);
+    if (vorbisInputs.isEmpty()) return 0;
+    size_t inputSize = 0;
+    for (const auto& buffer : qAsConst(vorbisInputs)) {
+        inputSize += buffer->size();
+    }
+    return inputSize;
 }
 
 //vorbisfile read callback
@@ -87,7 +112,7 @@ const audio::SamplesBuffer &Decoder::decode(int maxSamplesToDecode)
 
     static const int MIN_BUFFER_SIZE = 8192;
 
-    if (!initialized && vorbisInput.size() >= MIN_BUFFER_SIZE) {
+    if (!initialized && getInputSize() >= MIN_BUFFER_SIZE) {
 
         initialize();
     }
@@ -129,16 +154,23 @@ const audio::SamplesBuffer &Decoder::decode(int maxSamplesToDecode)
     return internalBuffer;
 }
 
-void Decoder::setInputData(const QByteArray &vorbisData)
+void Decoder::setInputData(const QSharedPointer<QByteArray>& vorbisData)
 {
-    vorbisInput.clear();
-    vorbisInput.append(vorbisData);
+    QMutexLocker locker(&mutex);
+    vorbisInputOffset = 0;
+    vorbisInputs.clear();
+    if (vorbisData && vorbisData->size() > 0) {
+        vorbisInputs.append(vorbisData);
+    }
     //qDebug() << "Input data setted to " << vorbisData.left(32);
 }
 
-void Decoder::addInputData(const QByteArray &vorbisData)
+void Decoder::addInputData(const QSharedPointer<QByteArray>& vorbisData)
 {
-    vorbisInput.append(vorbisData);
+    QMutexLocker locker(&mutex);
+    if (vorbisData && vorbisData->size() > 0) {
+        vorbisInputs.append(vorbisData);
+    }
     //qDebug() << vorbisData.size() << " bytes appended";
 }
 

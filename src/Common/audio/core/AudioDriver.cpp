@@ -26,6 +26,11 @@ ChannelRange::ChannelRange() :
 
 }
 
+bool ChannelRange::operator==(const ChannelRange& rhs) const
+{
+    return firstChannel == rhs.firstChannel && channelsCount == rhs.channelsCount;
+}
+
 void ChannelRange::setToStereo()
 {
     this->channelsCount = 2;
@@ -37,24 +42,23 @@ void ChannelRange::setToMono()
 }
 
 // +++++++++++++++++++++++++++++++++++++++++++
-AudioDriver::AudioDriver(controller::MainController *mainController) :
+AudioDriver::AudioDriver() :
     globalInputRange(0, 0),
     globalOutputRange(0, 0),
     audioInputDeviceIndex(-1),
     audioOutputDeviceIndex(-1),
     sampleRate(44100),
     bufferSize(128),
-    inputBuffer(SamplesBuffer(2)),
-    outputBuffer(SamplesBuffer(2)),
-    mainController(mainController)
+    inputBuffer(QSharedPointer<SamplesBuffer>::create(2)),
+    outputBuffer(QSharedPointer<SamplesBuffer>::create(2))
 {
 
 }
 
 void AudioDriver::recreateBuffers()
 {
-    inputBuffer = SamplesBuffer(globalInputRange.getChannels());
-    outputBuffer = SamplesBuffer(globalOutputRange.getChannels());
+    inputBuffer = QSharedPointer<SamplesBuffer>::create(globalInputRange.getChannels());
+    outputBuffer = QSharedPointer<SamplesBuffer>::create(globalOutputRange.getChannels());
 }
 
 AudioDriver::~AudioDriver()

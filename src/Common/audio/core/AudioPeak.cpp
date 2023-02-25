@@ -11,6 +11,12 @@ AudioPeak::AudioPeak(float leftPeak, float rightPeak, float rmsLeft, float rmsRi
 
     rms[0] = rmsLeft;
     rms[1] = rmsRight;
+
+    static bool registered = false;
+    if (!registered) {
+        qRegisterMetaType<AudioPeak>();
+        registered = true;
+    }
 }
 
 AudioPeak::AudioPeak()

@@ -1,5 +1,6 @@
 #include "UsersDataCache.h"
 #include "log/Logging.h"
+#include "audio/NinjamTrackNode.h"
 #include <QDir>
 #include <QFile>
 #include <QStandardPaths>
@@ -50,7 +51,7 @@ QDataStream &operator>>(QDataStream &stream, CacheEntry &entry)
     QString userIp, userName;
     quint8 channelID;
     bool muted;
-    int lowCutState;
+    LowCutState lowCutState;
     float gain, pan, boost;
     int instrumentIndex;
 
@@ -80,7 +81,7 @@ CacheEntry::CacheEntry(const QString &userIp, const QString &userName, quint8 ch
     setGain(DEFAULT_GAIN);
     setPan(DEFAULT_PAN);
     setBoost(DEFAULT_BOOST);
-    setLowCutState(DEFAULT_LOW_CUT_STATE);
+    setLowCutState(LowCutState::Off);
     setInstrumentIndex(DEFAULT_INSTRUMENT_INDEX);
 }
 
@@ -94,7 +95,7 @@ bool CacheEntry::hasValidInstrumentIndex() const
     return instrumentIndex >= 0;
 }
 
-void CacheEntry::setLowCutState(quint8 state)
+void CacheEntry::setLowCutState(LowCutState state)
 {
     this->lowCutState = state;
 }

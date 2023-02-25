@@ -29,6 +29,10 @@ namespace controller {
 class MainController;
 }
 
+namespace persistence {
+enum class WaveDrawingMode : quint8;
+}
+
 class JamRoomViewPanel : public QFrame
 {
     Q_OBJECT
@@ -42,7 +46,7 @@ public:
 
     void setShowBufferingState(bool showBuffering);
     void setBufferingPercentage(int percentage);
-    void setWaveDrawingMode(WavePeakPanel::WaveDrawingMode mode);
+    void setWaveDrawingMode(persistence::WaveDrawingMode mode);
 
     login::RoomInfo getRoomInfo() const;
 
@@ -68,7 +72,7 @@ private:
     MapWidget *map;
 
     QLayout *waveDrawingButtonsLayout;
-    QMap<WavePeakPanel::WaveDrawingMode, QPushButton*> waveDrawingButtons;
+    QMap<persistence::WaveDrawingMode, QPushButton*> waveDrawingButtons;
     void createWaveDrawingButtonsLayout(QLayout *layout);
     void setWaveDrawingButtonsVisibility(bool showButtons);
 

@@ -31,6 +31,7 @@ public:
         channelIndex(channelIndex),
         userFullName(userFullName),
         GUID(GUID),
+        vorbisData(QSharedPointer<QByteArray>::create()),
         containsAudio(audio)
     {
 
@@ -53,7 +54,7 @@ public:
 
     inline void appendEncodedData(const QByteArray &data)
     {
-        this->vorbisData.append(data);
+        this->vorbisData->append(data);
     }
 
     inline quint8 getChannelIndex() const
@@ -71,7 +72,7 @@ public:
         return GUID;
     }
 
-    inline QByteArray getEncodedData() const
+    inline const QSharedPointer<QByteArray>& getEncodedData() const
     {
         return vorbisData;
     }
@@ -80,7 +81,7 @@ private:
     quint8 channelIndex;
     QString userFullName;
     MessageGuid GUID; // Global Unique ID
-    QByteArray vorbisData;
+    QSharedPointer<QByteArray> vorbisData;
     bool containsAudio; // audio or video?
 };
 
@@ -332,12 +333,12 @@ void Service::process(const DownloadIntervalWrite &msg)
     if (downloads.contains(msg.getGUID())) {
         Download &download = downloads[msg.getGUID()];
 
-        bool isFirstPart = download.getEncodedData().isEmpty();
+        bool isFirstPart = download.getEncodedData()->isEmpty();
 
-        download.appendEncodedData(msg.getEncodedData());
+        download.appendEncodedData(*msg.getEncodedData());
 
         auto &measurer = channelDownloadMeasurers[download.getUserFullName()][download.getChannelIndex()];
-        auto bytesReceived = msg.getEncodedData().size();
+        auto bytesReceived = msg.getEncodedData()->size();
         measurer.addTransferedBytes(bytesReceived);
 
         User user = currentServer->getUser(download.getUserFullName());

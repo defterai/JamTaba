@@ -4,116 +4,91 @@
 #include "core/AudioNode.h"
 #include <QByteArray>
 #include "SamplesBufferResampler.h"
-#include "readerwriterqueue.h"
 
 namespace audio {
 class SamplesBuffer;
 class StreamBuffer;
 }
 
+enum class LowCutState : quint8
+{
+    Off = 0,
+    Normal,
+    Drastic,
+};
+
 class NinjamTrackNode final : public audio::AudioNode
 {
+    Q_OBJECT
 
 public:
-
-    enum LowCutState
-    {
-        Off, Normal, Drastic
-    };
-
-    enum ChannelMode {
-        Intervalic,
+    enum class ChannelMode {
+        Intervalic = 0,
         VoiceChat,
-        Changing // used when waiting for the next interval do change the mode. Nothing is played in this 'transition state mode'
+        Changing,   // used when waiting for the next interval do change the mode. Nothing is played in this 'transition state mode'
     };
 
-    explicit NinjamTrackNode(int ID);
+    explicit NinjamTrackNode(int sampleRate);
     virtual ~NinjamTrackNode();
-    void addVorbisEncodedInterval(const QByteArray &fullIntervalBytes);
-    void addVorbisEncodedChunk(const QByteArray &chunkBytes, bool isFirstPart, bool isLastPart);
-    void processReplacing(const audio::SamplesBuffer &in, audio::SamplesBuffer &out, int sampleRate,
+    void processReplacing(const audio::SamplesBuffer &in, audio::SamplesBuffer &out,
                           std::vector<midi::MidiMessage> &midiBuffer) override;
+    int getDecoderSampleRate() const;
 
-    void setLowCutState(LowCutState newState);
-    LowCutState setLowCutToNextState();
     LowCutState getLowCutState() const;
 
-    bool startNewInterval();
-    int getID() const;
-
-    int getSampleRate() const;
-
     bool isReceiveState() const;
-
-    void setReceiveState(bool enabled);
 
     bool isPlaying();
 
     bool isStereo() const;
 
-    bool isIntervalic() const { return mode == Intervalic; }
+    bool isIntervalic() const { return mode == ChannelMode::Intervalic; }
 
-    bool isVoiceChat() const { return mode == VoiceChat; }
+    bool isVoiceChat() const { return mode == ChannelMode::VoiceChat; }
 
-    void schefuleSetChannelMode(ChannelMode mode);
+    void scheduleSetChannelMode(ChannelMode mode);
 
-    // Discard all downloaded (but not played yet) intervals
-    void discardDownloadedIntervals();
+signals:
+    void xmitStateChanged(bool transmiting);
+    void lowCutStateChanged(LowCutState newState);
 
-    void stopDecoding();
+    void postVorbisEncodedInterval(const QSharedPointer<QByteArray>& fullIntervalBytes);
+    void postVorbisEncodedChunk(const QSharedPointer<QByteArray>& chunkBytes, bool isFirstPart, bool isLastPart);
+    void postStartNewInterval();
+    void postDiscardDownloadedIntervals();
+    void postNextLowCutState();
+    void postReceiveState(bool enabled);
+    void postChannelMode(NinjamTrackNode::ChannelMode newMode);
 
-    //void setProcessingLastPartOfInterval(bool status);
-
-protected:
-
-    class TrackNodeCommand {
-    protected:
-        TrackNodeCommand(NinjamTrackNode *node);
-        NinjamTrackNode *trackNode;
-
-    public:
-        virtual ~TrackNodeCommand() {}
-        virtual void execute() = 0;
-    };
-
-    class ChangeChannelModeCommand;
-
-    void setChannelMode(ChannelMode newMode);
+private slots:
+    void addVorbisEncodedInterval(const QSharedPointer<QByteArray>& fullIntervalBytes);
+    void addVorbisEncodedChunk(const QSharedPointer<QByteArray>& chunkBytes, bool isFirstPart, bool isLastPart);
+    void startNewInterval();
+    void discardDownloadedIntervals();  // Discard all downloaded (but not played yet) intervals
+    void setLowCutToNextState();
+    void setReceiveState(bool enabled);
+    void setChannelMode(NinjamTrackNode::ChannelMode newMode);
 
 private:
-    int ID;
-    SamplesBufferResampler resampler;
-
-    class LowCutFilter;
-    QScopedPointer<LowCutFilter> lowCut;
     const static double LOW_CUT_NORMAL_FREQUENCY;
     const static double LOW_CUT_DRASTIC_FREQUENCY;
 
-    bool isPlayingLocked();
-    void discardDownloadedIntervalsLocked();
-
-    bool nodeDestroying;
-
+    class LowCutFilter;
     class IntervalDecoder;
 
+    SamplesBufferResampler resampler;
+    QScopedPointer<LowCutFilter> lowCut;
     QList<std::shared_ptr<IntervalDecoder>> decoders;
     std::shared_ptr<IntervalDecoder> currentDecoder;
-    QMutex decodersMutex;
-
-    ChannelMode mode = Intervalic;
-
-    moodycamel::ReaderWriterQueue<TrackNodeCommand *> pendingCommands;
-
+    ChannelMode mode;
+    bool nodeDestroying;
     bool receiveState;
 
-    void consumePendingEvents(bool process);
-
+    void stopDecoding();
 };
 
-
-inline int NinjamTrackNode::getID() const
-{
-    return ID;
-}
+Q_DECLARE_METATYPE(LowCutState)
+Q_DECLARE_METATYPE(NinjamTrackNode::ChannelMode)
+Q_DECLARE_METATYPE(QSharedPointer<QByteArray>)
 
 #endif // NINJAMTRACKNODE_H

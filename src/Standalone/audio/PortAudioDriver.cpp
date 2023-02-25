@@ -1,12 +1,13 @@
 #include "PortAudioDriver.h"
 #include <QDebug>
 #include <QtGlobal>
+#include <QElapsedTimer>
 
 #include "portaudio.h"
 #include "audio/core/SamplesBuffer.h"
-#include "persistence/Settings.h"
-#include "MainController.h"
+#include "persistence/AudioSettings.h"
 #include "log/Logging.h"
+#include "Helpers.h"
 
 #include <stdexcept>
 #include <algorithm>
@@ -20,58 +21,80 @@
 namespace audio
 {
 
-PortAudioDriver::PortAudioDriver(controller::MainController* mainController, QString audioInputDevice, QString audioOutputDevice, int firstInputIndex, int lastInputIndex, int firstOutputIndex, int lastOutputIndex, int sampleRate, int bufferSize ) :
-    AudioDriver(mainController),
+// static QElapsedTimer perfTimer;
+
+QMutex PortAudioDriver::driverInstanceMutex;
+QWeakPointer<PortAudioDriver> PortAudioDriver::driverInstance;
+
+QSharedPointer<PortAudioDriver> PortAudioDriver::CreateInstance() {
+    QMutexLocker locker(&driverInstanceMutex);
+    auto strongInstance = driverInstance.lock();
+    if (strongInstance) {
+        strongInstance->release();
+        driverInstance.clear();
+    }
+    strongInstance = QSharedPointer<PortAudioDriver>::create();
+    if (strongInstance->initialize()) {
+        driverInstance = strongInstance;
+        return strongInstance;
+    }
+    return nullptr;
+}
+
+QSharedPointer<PortAudioDriver> PortAudioDriver::GetInstance()
+{
+    QMutexLocker locker(&driverInstanceMutex);
+    return driverInstance.lock();
+}
+
+PortAudioDriver::PortAudioDriver() :
     useSystemDefaultDevices(false)
+{
+    qRegisterMetaType<QFutureInterface<void>>();
+    qRegisterMetaType<QSharedPointer<audio::SamplesBuffer>>();
+}
+
+bool PortAudioDriver::initialize()
 {
     qCDebug(jtAudio) << QString("initializing portaudio (%1)...").arg(Pa_GetVersionText());
     auto error = Pa_Initialize();
     if (error != paNoError) {
         qCritical() << "ERROR initializing portaudio:" << Pa_GetErrorText(error);
-        return;
+        return false;
     }
+    return true;
+}
 
+bool PortAudioDriver::configure(persistence::AudioSettings& settings)
+{
     auto devicesNames = getDeviceNames();
 
     qCDebug(jtAudio) << "Device names: " << devicesNames;
 
-    auto devicesFound = devicesNames.contains(audioInputDevice) && devicesNames.contains(audioOutputDevice);
-
+    auto devicesFound = devicesNames.contains(settings.getInputDevice()) && devicesNames.contains(settings.getOutputDevice());
     if (devicesFound) {
-        audioInputDeviceIndex = devicesNames.indexOf(audioInputDevice);
-        audioOutputDeviceIndex = UseSingleAudioIODevice ? audioInputDeviceIndex : devicesNames.indexOf(audioOutputDevice);
-        globalInputRange = ChannelRange(firstInputIndex, (lastInputIndex - firstInputIndex) + 1);
-        globalOutputRange = ChannelRange(firstOutputIndex, (lastOutputIndex - firstOutputIndex) + 1);
-    }
-    else {
+        audioInputDeviceIndex = devicesNames.indexOf(settings.getInputDevice());
+        audioOutputDeviceIndex = UseSingleAudioIODevice ? audioInputDeviceIndex : devicesNames.indexOf(settings.getOutputDevice());
+        globalInputRange = ChannelRange(settings.getFirstInputIndex(), (settings.getLastInputIndex() - settings.getFirstInputIndex()) + 1);
+        globalOutputRange = ChannelRange(settings.getFirstOutputIndex(), (settings.getLastOutputIndex() - settings.getFirstOutputIndex()) + 1);
+    } else {
         audioInputDeviceIndex = audioOutputDeviceIndex = paNoDevice; // forcing system default device
     }
 
-    auto portAudioInitialized = initPortAudio(sampleRate, bufferSize);
-
-    if (portAudioInitialized) {
-        if (!devicesFound) {
-
-            // if the previous device not found store the default system device as 'last used device'
-
-            auto firstIn = globalInputRange.getFirstChannel();
-            auto firstOut = globalOutputRange.getFirstChannel();
-            auto lastIn = globalInputRange.getLastChannel();
-            auto lastOut = globalOutputRange.getLastChannel();
-            auto inputDevice = (audioInputDeviceIndex >= 0 && audioInputDeviceIndex < devicesNames.size()) ? devicesNames[audioInputDeviceIndex] : "";
-            auto outputDevice = (audioOutputDeviceIndex >= 0 && audioOutputDeviceIndex < devicesNames.size()) ? devicesNames[audioOutputDeviceIndex] : "";
-
-            mainController->storeIOSettings(
-                        firstIn, lastIn,            // input channels
-                        firstOut, lastOut,          // output channels
-                        inputDevice, outputDevice   // I/O device names
-            );
-        }
-    }
-    else {
+    if (!initPortAudio(sampleRate, bufferSize)) {
         audioInputDeviceIndex = audioOutputDeviceIndex = paNoDevice;
+        return false;
     }
-
+    if (!devicesFound) {
+        // if the previous device not found store the default system device as 'last used device'
+        settings.setFirstInputIndex(globalInputRange.getFirstChannel());
+        settings.setFirstOutputIndex(globalOutputRange.getFirstChannel());
+        settings.setLastInputIndex(globalInputRange.getLastChannel());
+        settings.setLastOutputIndex(globalOutputRange.getLastChannel());
+        settings.setInputDevice((audioInputDeviceIndex >= 0 && audioInputDeviceIndex < devicesNames.size()) ? devicesNames[audioInputDeviceIndex] : "");
+        settings.setOutputDevice((audioOutputDeviceIndex >= 0 && audioOutputDeviceIndex < devicesNames.size()) ? devicesNames[audioOutputDeviceIndex] : "");
+    }
+    return true;
 }
 
 QStringList PortAudioDriver::getDeviceNames() const
@@ -111,8 +134,7 @@ int PortAudioDriver::getAudioOutputDeviceIndex() const
 
 bool PortAudioDriver::initPortAudio(int sampleRate, int bufferSize)
 {
-
-    paStream = nullptr;// inputBuffer = outputBuffer = NULL;
+    Q_ASSERT(!paStream);
 
     // check for invalid audio device index
     if (!useSystemDefaultDevices) {
@@ -199,35 +221,37 @@ PortAudioDriver::~PortAudioDriver()
 // this method just convert portaudio void* inputBuffer to a float[][] buffer, and do the same for outputs
 void PortAudioDriver::translatePortAudioCallBack(const void *in, void *out, unsigned long framesPerBuffer)
 {
+    if (!paStream) return;
     const uint bytesToProcess = framesPerBuffer * sizeof(float);
 
+    QMutexLocker locker(&processMutex);
     // prepare buffers and expose then to application process
-    inputBuffer.setFrameLenght(framesPerBuffer);
-    outputBuffer.setFrameLenght(framesPerBuffer);
+    inputBuffer->setFrameLenght(framesPerBuffer);
+    outputBuffer->setFrameLenght(framesPerBuffer);
     if (!globalInputRange.isEmpty()) {
         float **inputs = (float**)in;
         int inputChannels = globalInputRange.getChannels();
         for (int c = 0; c < inputChannels; c++) {
-            std::memcpy(inputBuffer.getSamplesArray(c), inputs[c], bytesToProcess);
+            std::memcpy(inputBuffer->getSamplesArray(c), inputs[c], bytesToProcess);
         }
     }
     else {
-        inputBuffer.zero();
+        inputBuffer->zero();
     }
 
-    outputBuffer.zero();
-
+    outputBuffer->zero();
 
     // all application audio processing is computed here
-    if (mainController) {
-        mainController->process(inputBuffer, outputBuffer, sampleRate);
-    }
+    QFutureInterface<void> futureInterface;
+    futureInterface.reportStarted();
+    emit processDataAvailable(futureInterface, inputBuffer, outputBuffer);
+    futureInterface.waitForFinished();
 
     // convert application output buffers to portaudio format
     float **outputs = static_cast<float**>(out);
     int outputChannels = globalOutputRange.getChannels();
     for (int c = 0; c < outputChannels; c++){
-        std::memcpy(outputs[c], outputBuffer.getSamplesArray(c), bytesToProcess);
+        std::memcpy(outputs[c], outputBuffer->getSamplesArray(c), bytesToProcess);
     }
 }
 
@@ -237,11 +261,15 @@ int portaudioCallBack(const void *inputBuffer, void *outputBuffer,
                       PaStreamCallbackFlags /*statusFlags*/, void *userData)
 {
     //qDebug() << "portAudioCallBack  Thread ID: " << QThread::currentThreadId();
-    PortAudioDriver* instance = static_cast<PortAudioDriver*>(userData);
-    instance->translatePortAudioCallBack(inputBuffer, outputBuffer, framesPerBuffer);
+    //perfTimer.start();
+    auto instance = PortAudioDriver::GetInstance();
+    if (instance && instance == userData)
+    {
+        instance->translatePortAudioCallBack(inputBuffer, outputBuffer, framesPerBuffer);
+    }
+    //qDebug(jtAudio) << "Process audio time: " << perfTimer.nsecsElapsed();
     return paContinue;
 }
-
 
 bool PortAudioDriver::start()
 {
@@ -267,10 +295,13 @@ bool PortAudioDriver::start()
         qCDebug(jtAudio) << "Starting portaudio using" << getAudioOutputDeviceName() << " as output device.";
     }
 
-    ensureInputRangeIsValid();
-    ensureOutputRangeIsValid();
+    {
+        QMutexLocker locker(&processMutex);
+        ensureInputRangeIsValid();
+        ensureOutputRangeIsValid();
 
-    recreateBuffers(); //adjust the input and output buffers channels
+        recreateBuffers(); //adjust the input and output buffers channels
+    }
 
     unsigned long framesPerBuffer = bufferSize; // paFramesPerBufferUnspecified;
     qCDebug(jtAudio) << "Starting portaudio using" << framesPerBuffer << " as buffer size.";
@@ -340,7 +371,6 @@ bool PortAudioDriver::start()
         }
     }
 
-    paStream = NULL;
     error = Pa_OpenStream(&paStream,
                           (!globalInputRange.isEmpty()) ? (&inputParams) : NULL,
                           &outputParams,
@@ -348,13 +378,13 @@ bool PortAudioDriver::start()
                           framesPerBuffer,
                           paNoFlag,
                           portaudioCallBack,
-                          (void*)this); // I'm passing 'this' to portaudio, so I can run methods inside the callback function
+                          this); // I'm passing 'this' to portaudio, so I can run methods inside the callback function
 
     if (error != paNoError) {
         releaseHostSpecificParameters(inputParams, outputParams);
         return false;
     }
-    if (paStream != NULL) {
+    if (paStream) {
         preInitializePortAudioStream(paStream);
         error = Pa_StartStream(paStream);
         if (error != paNoError) {
@@ -407,6 +437,7 @@ void PortAudioDriver::stop(bool refreshDevicesList)
             if (error != paNoError) {
                 qCritical() << "   Error closing portaudio stream: " << Pa_GetErrorText(error);
             }
+            paStream = nullptr;
             emit stopped();
             qCDebug(jtAudio) << "Portaudio driver stoped!";
         }
@@ -452,14 +483,20 @@ int PortAudioDriver::getMaxOutputs() const
 
 void PortAudioDriver::setAudioInputDeviceIndex(PaDeviceIndex index)
 {
-    stop();
-    audioInputDeviceIndex = !useSystemDefaultDevices ? index: paNoDevice;
+    auto newInputDeviceIndex = useSystemDefaultDevices ? paNoDevice : index;
+    if (audioInputDeviceIndex != newInputDeviceIndex) {
+        stop();
+        audioInputDeviceIndex = newInputDeviceIndex;
+    }
 }
 
 void PortAudioDriver::setAudioOutputDeviceIndex(PaDeviceIndex index)
 {
-    stop();
-    audioOutputDeviceIndex = !useSystemDefaultDevices ? index: paNoDevice;
+    auto newOutputDeviceIndex = useSystemDefaultDevices ? paNoDevice : index;
+    if (audioOutputDeviceIndex != newOutputDeviceIndex) {
+        stop();
+        audioOutputDeviceIndex = newOutputDeviceIndex;
+    }
 }
 
 QString PortAudioDriver::getAudioInputDeviceName(int index) const

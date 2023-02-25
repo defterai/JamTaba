@@ -28,8 +28,8 @@ public:
 signals:
     void gainSliderChanged(int value);
     void panSliderChanged(int value);
-    void muteButtonClicked();
-    void soloButtonClicked();
+    void muteButtonClicked(bool enabled);
+    void soloButtonClicked(bool enabled);
     void preferencesButtonClicked();
     void floatingWindowButtonToggled(bool checked);
 

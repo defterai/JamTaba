@@ -2,8 +2,11 @@
 #define AUDIO_DRIVER_H
 
 #include "SamplesBuffer.h"
+#include "Helpers.h"
 #include <QObject>
 #include <QMutex>
+#include <QFutureInterface>
+#include <QSharedPointer>
 
 // Change settings below to experiment with seperate input/output audio devices
 #ifdef Q_OS_WIN
@@ -12,8 +15,8 @@
     const bool UseSingleAudioIODevice = false;
 #endif
 
-namespace controller {
-class MainController;
+namespace persistence {
+class AudioSettings;
 }
 
 namespace audio {
@@ -27,13 +30,14 @@ private:
     int channelsCount;
 
 public:
-
-    ChannelRange(int firstChannel, int channelsCount);
     ChannelRange();
+    ChannelRange(int firstChannel, int channelsCount);
+    bool operator==(const ChannelRange&) const;
 
     int getChannels() const;
 
     bool isMono() const;
+    bool isStereo() const;
 
     void setToStereo();
     void setToMono();
@@ -69,6 +73,11 @@ inline bool ChannelRange::isMono() const
     return channelsCount == 1;
 }
 
+inline bool ChannelRange::isStereo() const
+{
+    return channelsCount == 2;
+}
+
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 const int CurrentAudioDeviceSelection = -1;
 
@@ -77,18 +86,23 @@ class AudioDriver : public QObject
     Q_OBJECT
 
 signals:
+    void processDataAvailable(QFutureInterface<void> futureInterface,
+                              QSharedPointer<audio::SamplesBuffer> in,
+                              QSharedPointer<audio::SamplesBuffer> out);
     void sampleRateChanged(int newSampleRate);
     void stopped();
     void started();
 
 public:
-    explicit AudioDriver(controller::MainController *mainController);
+    AudioDriver();
     virtual ~AudioDriver();
     virtual void setProperties(int firstIn, int lastIn, int firstOut, int lastOut);
 
     virtual void setSampleRate(int newSampleRate);
     virtual void setBufferSize(int newBufferSize);
 
+    virtual bool initialize() = 0;
+    virtual bool configure(persistence::AudioSettings& settings) = 0;
     virtual void stop(bool refreshDevicesList = false) = 0;
     virtual bool start() = 0;
     virtual void release() = 0;
@@ -145,18 +159,16 @@ protected:
     int sampleRate;
     int bufferSize;
 
-    SamplesBuffer inputBuffer;
-    SamplesBuffer outputBuffer;
+    QSharedPointer<audio::SamplesBuffer> inputBuffer;
+    QSharedPointer<audio::SamplesBuffer> outputBuffer;
 
     void recreateBuffers();
-
-    controller::MainController *mainController;
 };
 
 
 inline const SamplesBuffer &AudioDriver::getOutputBuffer() const
 {
-    return outputBuffer;
+    return *outputBuffer;
 }
 
 inline int AudioDriver::getInputsCount() const
@@ -197,11 +209,14 @@ class NullAudioDriver : public AudioDriver
 
 public:
 
-    NullAudioDriver() :
-        AudioDriver(nullptr)
+    NullAudioDriver()
     {
 
     }
+
+    bool initialize() override;
+
+    bool configure(persistence::AudioSettings& settings) override;
 
     void stop(bool) override;
 
@@ -248,6 +263,17 @@ public:
 inline void NullAudioDriver::stop(bool)
 {
     //
+}
+
+inline bool NullAudioDriver::initialize()
+{
+    return true;
+}
+
+inline bool NullAudioDriver::configure(persistence::AudioSettings& settings)
+{
+    Q_UNUSED(settings);
+    return true;
 }
 
 inline bool NullAudioDriver::start()
@@ -347,5 +373,7 @@ inline void NullAudioDriver::openControlPanel(void *)
 }
 
 } // namespace
+
+Q_DECLARE_METATYPE(QSharedPointer<audio::SamplesBuffer>)
 
 #endif

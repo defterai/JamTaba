@@ -3,6 +3,11 @@
 
 #include <QWidget>
 
+namespace persistence
+{
+    enum class WaveDrawingMode : quint8;
+}
+
 class WavePeakPanel : public QWidget
 {
     Q_OBJECT
@@ -15,14 +20,6 @@ public:
     explicit WavePeakPanel(QWidget *parent = 0);
     virtual ~WavePeakPanel();
 
-    enum WaveDrawingMode
-    {
-        SOUND_WAVE,
-        BUILDINGS,
-        PIXELED_SOUND_WAVE,
-        PIXELED_BUILDINGS
-    };
-
     void addPeak(float peak);
     void clearPeaks();
 
@@ -30,7 +27,7 @@ public:
 
     void setBufferingPercentage(uint percentage);
     void setShowBuffering(bool setShowBuffering);
-    void setDrawingMode(WavePeakPanel::WaveDrawingMode mode);
+    void setDrawingMode(persistence::WaveDrawingMode mode);
 
     virtual void setPeaksColor(const QColor &color);
 
@@ -62,7 +59,7 @@ private:
     void paintSoundWave(QPainter &painter, bool useAlpha);
     void paintPixeledSoundWave(QPainter &painter);
 
-    WaveDrawingMode drawingMode;
+    persistence::WaveDrawingMode drawingMode;
 
 };
 

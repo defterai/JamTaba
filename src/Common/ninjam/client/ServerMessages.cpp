@@ -531,7 +531,8 @@ void DownloadIntervalBegin::printDebug(QDebug &dbg) const
 // -------------------------------------------------------------------
 
 DownloadIntervalWrite::DownloadIntervalWrite() :
-    ServerMessage(MessageType::DownloadIntervalWrite)
+    ServerMessage(MessageType::DownloadIntervalWrite),
+    encodedData(QSharedPointer<QByteArray>::create())
 {
 
 }
@@ -540,7 +541,7 @@ DownloadIntervalWrite::DownloadIntervalWrite(const MessageGuid &GUID, quint8 fla
     ServerMessage(MessageType::DownloadIntervalWrite),
     GUID(GUID),
     flags(flags),
-    encodedData(encodedData)
+    encodedData(QSharedPointer<QByteArray>::create(encodedData))
 {
 
 }
@@ -556,7 +557,7 @@ DownloadIntervalWrite DownloadIntervalWrite::from(const UploadIntervalWrite &msg
 
 quint32 DownloadIntervalWrite::getSerializePayload() const
 {
-    return sizeof(GUID) + sizeof(quint8) + NinjamOutputDataStream::getByteArrayPayload(encodedData);
+    return sizeof(GUID) + sizeof(quint8) + NinjamOutputDataStream::getByteArrayPayload(*encodedData);
 }
 
 bool DownloadIntervalWrite::serializeTo(NinjamOutputDataStream& stream) const
@@ -564,15 +565,15 @@ bool DownloadIntervalWrite::serializeTo(NinjamOutputDataStream& stream) const
     return (ServerMessage::serializeTo(stream) &&
             stream.writeByteArray(GUID) &&
             stream.write<quint8>(flags) &&
-            stream.writeByteArray(encodedData));
+            stream.writeByteArray(*encodedData));
 }
 
 bool DownloadIntervalWrite::unserializeFrom(NinjamInputDataStream& stream)
 {
     if (stream.readByteArray(GUID) &&
             stream.read<quint8>(flags)) {
-        encodedData.resize(stream.getRemainingPayload());
-        return stream.readByteArray(encodedData);
+        encodedData->resize(stream.getRemainingPayload());
+        return stream.readByteArray(*encodedData);
     }
     return false;
 }
@@ -582,6 +583,6 @@ void DownloadIntervalWrite::printDebug(QDebug &dbg) const
     dbg << "RECEIVE DownloadIntervalWrite{ flags='" << flags
         << "' GUID={" << QString::fromUtf8(GUID.data(), GUID.size())
         << "} downloadIsComplete=" << downloadIsComplete()
-        << ", audioData=" << encodedData.size() << " bytes }"
+        << ", audioData=" << encodedData->size() << " bytes }"
         << Qt::endl;
 }

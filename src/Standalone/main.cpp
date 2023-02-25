@@ -50,7 +50,7 @@ int main(int argc, char *args[])
 #endif
     int execResult = application.exec();
 
-    mainController.saveLastUserSettings(mainWindow.getInputsSettings());
+    mainController.saveLastUserSettings();
 
     return execResult;
 }

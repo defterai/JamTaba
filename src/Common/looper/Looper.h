@@ -12,7 +12,9 @@
 #include <QMap>
 #include <QMutex>
 
-#define MAX_LOOP_LAYERS 8
+namespace persistence {
+    enum class LooperMode : quint8;
+}
 
 namespace audio {
 
@@ -33,16 +35,8 @@ class Looper : public QObject
     friend class WaitingToRecordState;
 
 public:
-
-    enum Mode
-    {
-        Sequence, // one layer in each interval
-        AllLayers, // mix and play all layers
-        SelectedLayer
-    };
-
     Looper();
-    Looper(Looper::Mode initialMode, quint8 maxLayers);
+    Looper(persistence::LooperMode initialMode, quint8 maxLayers);
     ~Looper();
     void addBuffer(const SamplesBuffer &samples); // recording
     void mixToBuffer(SamplesBuffer &samples); // playing/mixing
@@ -84,10 +78,10 @@ public:
 
     QList<SamplesBuffer> getLayersSamples() const;
 
-    static QString getModeString(Mode mode);
+    static QString getModeString(persistence::LooperMode mode);
 
-    void setMode(Mode mode);
-    Mode getMode() const;
+    void setMode(persistence::LooperMode mode);
+    persistence::LooperMode getMode() const;
 
     const std::vector<float> getLayerPeaks(quint8 layerIndex, uint samplesPerPeak) const;
 
@@ -172,7 +166,9 @@ private:
 
     bool activated;
 
-    LooperLayer *layers[MAX_LOOP_LAYERS];
+    std::vector<std::unique_ptr<LooperLayer>> layers;
+
+    //LooperLayer *layers[persistence::LooperSettings::MAX_LAYERS_COUNT];
     quint8 currentLayerIndex; // current played layer
     int focusedLayerIndex; // layer clicked by user, used to choose recording layer. Sometimes focused layer will be equal to currentLayerIndex.
     quint8 maxLayers;
@@ -191,7 +187,7 @@ private:
 
     QString loopName; // can be empty if no loop is loaded
 
-    Mode mode;
+    persistence::LooperMode mode;
 
     struct Options
     {
@@ -199,7 +195,7 @@ private:
         QMap<PlayingOption, bool> playingOptions;
     };
 
-    Options modeOptions[3]; // 3 modes
+    QMap<persistence::LooperMode, Options> modeOptions;
 
     void mixLayer(quint8 layerIndex, SamplesBuffer &samples, uint samplesToMix);
     void mixAllLayers(SamplesBuffer &samples, uint samplesToMix);
@@ -226,8 +222,8 @@ private:
 
     void processBufferUsingCurrentLayerSettings(SamplesBuffer &buffer);
 
-    static QMap<Looper::PlayingOption, bool> getDefaultSupportedPlayingOptions(Looper::Mode mode);
-    static QMap<Looper::RecordingOption, bool> getDefaultSupportedRecordingOptions(Looper::Mode mode);
+    static QMap<Looper::PlayingOption, bool> getDefaultSupportedPlayingOptions(persistence::LooperMode mode);
+    static QMap<Looper::RecordingOption, bool> getDefaultSupportedRecordingOptions(persistence::LooperMode mode);
 
 };
 
@@ -263,12 +259,12 @@ inline uint Looper::getIntervalLenght() const
 
 inline bool Looper::optionIsSupportedInCurrentMode(PlayingOption option) const
 {
-    return modeOptions[mode].playingOptions.keys().contains(option);
+    return modeOptions[mode].playingOptions.contains(option);
 }
 
 inline bool Looper::optionIsSupportedInCurrentMode(RecordingOption option) const
 {
-    return modeOptions[mode].recordingOptions.keys().contains(option);
+    return modeOptions[mode].recordingOptions.contains(option);
 }
 
 inline void Looper::setOption(Looper::RecordingOption option, bool value)
@@ -310,7 +306,7 @@ inline bool Looper::hasLockedLayers() const
     return getLockedLayers() > 0;
 }
 
-inline Looper::Mode Looper::getMode() const
+inline persistence::LooperMode Looper::getMode() const
 {
     return mode;
 }
@@ -334,7 +330,6 @@ inline quint8 Looper::getFocusedLayerIndex() const
 
 
 // declaring structs to use in signal/slots
-Q_DECLARE_METATYPE(audio::Looper::Mode)
 Q_DECLARE_METATYPE(audio::LooperLayer::MuteState)
 
 #endif

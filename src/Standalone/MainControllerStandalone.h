@@ -2,7 +2,10 @@
 #define STANDALONEMAINCONTROLLER_H
 
 #include "MainController.h"
+#include "audio/core/SamplesBuffer.h"
 #include <QApplication>
+#include <QSharedPointer>
+#include <QFutureInterface>
 
 #ifdef Q_OS_MAC
     #include "AU/AudioUnitPluginFinder.h"
@@ -32,6 +35,7 @@ namespace audio
     class Plugin;
     class AudioDriver;
     class PluginDescriptor;
+    class MidiInputProps;
 }
 
 using audio::VSTPluginFinder;
@@ -87,12 +91,10 @@ namespace controller
 
         QString getJamtabaFlavor() const override;
 
-        void setInputTrackToMono(int localChannelIndex, int inputIndexInAudioDevice);
-        void setInputTrackToStereo(int localChannelIndex, int firstInputIndex);
-        void setInputTrackToMIDI(int localChannelIndex, int midiDevice, int midiChannel,
-                                 qint8 transpose = 0, quint8 lowerNote = 0,
-                                 quint8 higherNote = 127);                                                                                         // use -1 to select all channels
-        void setInputTrackToNoInput(int localChannelIndex);
+        void setInputTrackToMono(const QSharedPointer<audio::LocalInputNode>& inputTrack, int inputIndexInAudioDevice);
+        void setInputTrackToStereo(const QSharedPointer<audio::LocalInputNode>& inputTrack, int firstInputIndex);
+        void setInputTrackToMIDI(const QSharedPointer<audio::LocalInputNode>& inputTrack, const audio::MidiInputProps& midiInpuProps);
+        void setInputTrackToNoInput(const QSharedPointer<audio::LocalInputNode>& inputTrack);
 
         bool isUsingNullAudioDriver() const;
 
@@ -107,21 +109,19 @@ namespace controller
             return vstPluginFinder.data();
         }
 
-        void removePlugin(int inputTrackIndex, const QSharedPointer<Plugin> &plugin);
         QMap<QString, QList<PluginDescriptor> > getPluginsDescriptors(
             PluginDescriptor::Category category);
-        QSharedPointer<Plugin> addPlugin(quint32 inputTrackIndex, quint32 pluginSlotIndex,
-                                         const PluginDescriptor &descriptor);
 
-        std::vector<midi::MidiMessage> pullMidiMessagesFromPlugins() override;
+        QVector<midi::MidiMessage> pullMidiMessagesFromPlugins() override;
 
+        QSharedPointer<Plugin> createPluginInstance(const PluginDescriptor &descriptor);
+
+    public slots:
         void startMidiClock() const override;
         void stopMidiClock() const override;
         void continueMidiClock() const override;
         void sendMidiClockPulse() const override;
 
-
-    public slots:
         void setSampleRate(int newSampleRate) override;
         void setBufferSize(int newBufferSize);
 
@@ -136,21 +136,21 @@ namespace controller
 
         void openExternalAudioControlPanel();
 
-        void connectInNinjamServer(const ServerInfo &server) override;
+        void connectInNinjamServer(const ninjam::client::ServerInfo &server) override;
 
     protected:
         midi::MidiDriver *createMidiDriver();
 
-        // TODO - Audio driver need just the audio settings to initialize, not the entire settings.
-        AudioDriver *createAudioDriver(const persistence::Settings &settings);
+        QSharedPointer<audio::AudioDriver> createAudioDriver();
 
         controller::NinjamController *createNinjamController() override;
 
         void setCSS(const QString &css) override;
 
         void setupNinjamControllerSignals() override;
+        void clearNinjamControllerSignals() override;
 
-        std::vector<midi::MidiMessage> pullMidiMessagesFromDevices() override;
+        QVector<midi::MidiMessage> pullMidiMessagesFromDevices() override;
 
     protected slots:
         void updateBpm(int newBpm) override;
@@ -175,7 +175,7 @@ namespace controller
         QList<Host *> hosts;
         QApplication *application;
 
-        QScopedPointer<AudioDriver> audioDriver;
+        QSharedPointer<AudioDriver> audioDriver;
         QScopedPointer<midi::MidiDriver> midiDriver;
 
         QList<PluginDescriptor> pluginsDescriptors;
@@ -192,8 +192,6 @@ namespace controller
         // used to sort plugins list
         static bool pluginDescriptorLessThan(const PluginDescriptor &d1,
                                              const PluginDescriptor &d2);
-
-        QSharedPointer<Plugin> createPluginInstance(const PluginDescriptor &descriptor);
 
         void scanVstPlugins(bool scanOnlyNewVstPlugins);
     };

@@ -18,6 +18,7 @@
 #include "Utils.h"
 #include "IconFactory.h"
 #include "audio/NinjamTrackNode.h"
+#include "NinjamController.h"
 #include "widgets/BoostSpinBox.h"
 #include "widgets/PeakMeter.h"
 #include "widgets/InstrumentsMenu.h"
@@ -30,8 +31,13 @@ quint32 NinjamTrackView::networkUsageUpdatePeriod = 4000;
 using controller::MainController;
 using persistence::CacheEntry;
 
-NinjamTrackView::NinjamTrackView(MainController *mainController, long trackID) :
-    BaseTrackView(mainController, trackID),
+NinjamTrackView::NinjamTrackView(controller::MainController* mainController,
+                                 const QSharedPointer<NinjamTrackNode>& trackNode,
+                                 const QSharedPointer<persistence::UsersDataCache>& userDataCache) :
+    BaseTrackView(trackNode),
+    mainController(mainController),
+    userDataCache(userDataCache),
+    lowCutState(trackNode->getLowCutState()),
     orientation(Qt::Vertical),
     downloadingFirstInterval(true),
     lastNetworkUsageUpdate(0)
@@ -67,6 +73,11 @@ NinjamTrackView::NinjamTrackView(MainController *mainController, long trackID) :
     BaseTrackView::setActivatedStatus(true); // disabled/grayed until receive the first bytes.
 
     voiceChatIcon = IconFactory::createVoiceChatIcon();
+
+    buttonLowCut->setState(static_cast<quint8>(lowCutState));
+
+    connect(trackNode.data(), &NinjamTrackNode::xmitStateChanged, this, &NinjamTrackView::xmitStateChanged);
+    connect(trackNode.data(), &NinjamTrackNode::lowCutStateChanged, this, &NinjamTrackView::lowCutStateChanged);
 }
 
 void NinjamTrackView::setPeaks(float peakLeft, float peakRight, float rmsLeft, float rmsRight)
@@ -111,12 +122,8 @@ void NinjamTrackView::paintEvent(QPaintEvent *ev)
 
 void NinjamTrackView::instrumentIconChanged(quint8 instrumentIndex)
 {
-    if (mainController) {
-        cacheEntry.setInstrumentIndex(instrumentIndex);
-        auto cache = mainController->getUsersDataCache();
-        if (cache)
-            cache->updateUserCacheEntry(cacheEntry);
-    }
+    cacheEntry.setInstrumentIndex(instrumentIndex);
+    updateUserCacheEntry();
 }
 
 void NinjamTrackView::setTintColor(const QColor &color)
@@ -143,7 +150,7 @@ void NinjamTrackView::setReceiveState(bool receive)
 
 QSharedPointer<NinjamTrackNode> NinjamTrackView::getTrackNode() const
 {
-    return mainController->getTrackNode(getTrackID()).dynamicCast<NinjamTrackNode>();
+    return trackNode.lock().dynamicCast<NinjamTrackNode>();
 }
 
 QPushButton *NinjamTrackView::createReceiveButton() const
@@ -180,20 +187,16 @@ void NinjamTrackView::updateLowCutButtonToolTip()
 
 QString NinjamTrackView::getLowCutStateText() const
 {
-    Q_ASSERT(mainController);
-
-    auto trackNode = getTrackNode();
-
-    if (trackNode) {
-        switch(trackNode->getLowCutState())
-        {
-        case NinjamTrackNode::Off: return tr("Off");
-        case NinjamTrackNode::Normal: return tr("Normal");
-        case NinjamTrackNode::Drastic: return tr("Drastic");
-        }
+    switch (lowCutState) {
+    case LowCutState::Off:
+        return tr("Off");
+    case LowCutState::Normal:
+        return tr("Normal");
+    case LowCutState::Drastic:
+        return tr("Drastic");
+    default:
+        return tr("Off"); // just to be shure
     }
-
-    return tr("Off"); // just to be shure
 }
 
 void NinjamTrackView::updateStyleSheet()
@@ -211,7 +214,7 @@ void NinjamTrackView::setInitialValues(const persistence::CacheEntry &initialVal
 {
     cacheEntry = initialValues;
 
-    auto settings = mainController->getSettings();
+    const auto& settings = mainController->getSettings().rememberSettings;
 
     if (settings.isRememberingLevel())
         levelSlider->setValue(initialValues.getGain() * 100);
@@ -234,12 +237,8 @@ void NinjamTrackView::setInitialValues(const persistence::CacheEntry &initialVal
     }
 
     if (settings.isRememberingLowCut()) {
-        quint8 lowCutState = initialValues.getLowCutState();
-        if (lowCutState < 3) { // Check for invalid lowCut state value, Low cut is 3 states: OFF, NOrmal and Drastic
-            for (int var = 0; var < lowCutState; ++var) {
-                buttonLowCut->click(); // force button state change
-            }
-        }
+        lowCutState = initialValues.getLowCutState();
+        buttonLowCut->setState(static_cast<quint8>(lowCutState));
     }
 
     auto instrumentIconIndex = initialValues.hasValidInstrumentIndex() ? initialValues.getInstrumentIndex() : guessInstrumentIcon();
@@ -251,7 +250,7 @@ void NinjamTrackView::setChannelMode(NinjamTrackNode::ChannelMode mode)
 {
     auto trackNode = getTrackNode();
     if (trackNode) {
-        trackNode->schefuleSetChannelMode(mode);
+        trackNode->scheduleSetChannelMode(mode);
         update();
     }
 }
@@ -291,11 +290,10 @@ void NinjamTrackView::updateGuiElements()
         networkUsageLabel->setText(QString::number(downloadTransferRate).leftJustified(3, QChar(' ')));
 
         QString toolTipText = QString("%1 %2 Kbps").arg(tr("Downloading")).arg(downloadTransferRate);
-        auto trackNode = getTrackNode();
         if (trackNode) {
             toolTipText += QString(" (%1, %2 KHz)")
                     .arg(trackNode->isStereo() ? tr("Stereo") : tr("Mono"),
-                         QString::number(trackNode->getSampleRate()/1000.0, 'f', 1));
+                         QString::number(trackNode->getDecoderSampleRate()/1000.0, 'f', 1));
         }
 
         networkUsageLabel->setToolTip(toolTipText);
@@ -324,8 +322,8 @@ void NinjamTrackView::setActivatedStatus(bool deactivated)
     // stop rendering downloaded audio
     auto trackNode = getTrackNode();
     if (trackNode) {
-        trackNode->setReceiveState(!deactivated);
-        trackNode->resetLastPeak(); // reset the internal node last peak to avoid getting the last peak calculated when the remote user was transmiting.
+        emit trackNode->postReceiveState(!deactivated);
+        emit trackNode->postResetLastPeak(); // reset the internal node last peak to avoid getting the last peak calculated when the remote user was transmiting.
     }
 }
 
@@ -480,59 +478,62 @@ void NinjamTrackView::setChannelName(const QString &name)
     instrumentsButton->setInstrumentIcon(guessInstrumentIcon());
 }
 
+void NinjamTrackView::updateUserCacheEntry()
+{
+    auto userDataCache = this->userDataCache.lock();
+    if (userDataCache) {
+        userDataCache->updateUserCacheEntry(cacheEntry);
+    }
+}
+
 void NinjamTrackView::setPan(int value)
 {
     BaseTrackView::setPan(value);
-
-    auto trackNode = getTrackNode();
-    if (trackNode)
-        cacheEntry.setPan(trackNode->getPan());
-
-    mainController->getUsersDataCache()->updateUserCacheEntry(cacheEntry);
+    cacheEntry.setPan(value / (float)panSlider->maximum());
+    updateUserCacheEntry();
 }
 
 void NinjamTrackView::setGain(int value)
 {
     BaseTrackView::setGain(value);
     cacheEntry.setGain(value/100.0);
-    mainController->getUsersDataCache()->updateUserCacheEntry(cacheEntry);
+    updateUserCacheEntry();
 }
 
-void NinjamTrackView::toggleMuteStatus()
+void NinjamTrackView::toggleMuteStatus(bool enabled)
 {
-    BaseTrackView::toggleMuteStatus();
-
-    auto trackNode = getTrackNode();
-    if (trackNode)
-        cacheEntry.setMuted(trackNode->isMuted());
-
-    mainController->getUsersDataCache()->updateUserCacheEntry(cacheEntry);
+    BaseTrackView::toggleMuteStatus(enabled);
+    cacheEntry.setMuted(enabled);
+    updateUserCacheEntry();
 }
 
 void NinjamTrackView::updateBoostValue(int index)
 {
     BaseTrackView::updateBoostValue(index);
+    cacheEntry.setBoost(Utils::dbToLinear(index));
+    updateUserCacheEntry();
+}
 
-    auto trackNode = getTrackNode();
-    if (trackNode) {
-        cacheEntry.setBoost(trackNode->getBoost());
-        mainController->getUsersDataCache()->updateUserCacheEntry(cacheEntry);
-    }
+void NinjamTrackView::xmitStateChanged(bool transmiting)
+{
+    setActivatedStatus(!transmiting);
+}
+
+void NinjamTrackView::lowCutStateChanged(LowCutState newState)
+{
+    lowCutState = newState;
+    cacheEntry.setLowCutState(newState);
+    updateUserCacheEntry();
+    updateLowCutButtonToolTip();
+    buttonLowCut->style()->unpolish(this);
+    buttonLowCut->style()->polish(this);
 }
 
 void NinjamTrackView::setLowCutToNextState()
 {
     auto node = getTrackNode();
     if (node) {
-        NinjamTrackNode::LowCutState newState = node->setLowCutToNextState();
-
-        cacheEntry.setLowCutState(newState);
-        mainController->getUsersDataCache()->updateUserCacheEntry(cacheEntry);
-
-        updateLowCutButtonToolTip();
-
-        buttonLowCut->style()->unpolish(this);
-        buttonLowCut->style()->polish(this);
+        emit node->postNextLowCutState();
     }
 }
 

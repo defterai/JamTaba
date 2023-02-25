@@ -14,7 +14,7 @@ class FFMpegDemuxer : public QObject
     Q_OBJECT
 
 public:
-    FFMpegDemuxer(QObject *parent, const QByteArray &encodedData);
+    FFMpegDemuxer(QObject *parent, const QSharedPointer<QByteArray>& encodedData);
     ~FFMpegDemuxer();
 
     bool decode();

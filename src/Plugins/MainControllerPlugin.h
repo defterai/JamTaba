@@ -45,7 +45,7 @@ public:
 
     void setCSS(const QString &css) override;
 
-    int addInputTrackNode(QSharedPointer<audio::LocalInputNode> inputTrackNode) override;
+    QSharedPointer<audio::LocalInputNode> createInputNode(int groupIndex) override;
 
     void setSampleRate(int newSampleRate) override;
 
@@ -65,9 +65,9 @@ public:
 
     Preset loadPreset(const QString &name) override;
 
-    inline std::vector<midi::MidiMessage> pullMidiMessagesFromPlugins() override
+    inline QVector<midi::MidiMessage> pullMidiMessagesFromPlugins() override
     {
-        return std::vector<midi::MidiMessage>(); // empty buffer
+        return QVector<midi::MidiMessage>(); // empty buffer
     }
 
     void startMidiClock() const override {};
@@ -76,9 +76,9 @@ public:
     void sendMidiClockPulse() const override {};
 
 protected:
-    inline std::vector<midi::MidiMessage> pullMidiMessagesFromDevices() override
+    inline QVector<midi::MidiMessage> pullMidiMessagesFromDevices() override
     {
-        return std::vector<midi::MidiMessage>(); // empty buffer
+        return QVector<midi::MidiMessage>(); // empty buffer
     }
 
     JamTabaPlugin *plugin;

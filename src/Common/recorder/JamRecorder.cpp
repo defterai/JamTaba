@@ -228,7 +228,7 @@ void JamRecorder::appendLocalUserVideo(const QByteArray &encodedVideo, bool isFi
     videoInterval.appendEncodedData(encodedVideo);
 }
 
-void JamRecorder::addRemoteUserAudio(const QString &userName, const QByteArray &encodedAudio, quint8 channelIndex)
+void JamRecorder::addRemoteUserAudio(const QString &userName, const QSharedPointer<QByteArray>& encodedAudio, quint8 channelIndex)
 {
     if (!running) {
         qCritical() << "Illegal state! Recorder is not running!";
@@ -238,7 +238,7 @@ void JamRecorder::addRemoteUserAudio(const QString &userName, const QByteArray &
     int intervalIndex = globalIntervalIndex;
     QString audioFileName = buildAudioFileName(userName, channelIndex, intervalIndex);
     QString audioFilePath = jamMetadataWritter->getAudioAbsolutePath(audioFileName);
-    QtConcurrent::run(this, &JamRecorder::writeEncodedFile, encodedAudio, audioFilePath);
+    QtConcurrent::run(this, &JamRecorder::writeEncodedFile, *encodedAudio, audioFilePath);
     jam->addAudioFile(userName, channelIndex, audioFilePath, intervalIndex);
 }
 

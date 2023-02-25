@@ -3,6 +3,7 @@
 
 #include "gui/LocalTrackView.h"
 #include "audio/core/AudioDriver.h"
+#include "audio/core/LocalInputNode.h"
 #include "MainControllerStandalone.h"
 #include "MidiToolsDialog.h"
 
@@ -20,7 +21,8 @@ class LocalTrackViewStandalone : public LocalTrackView
 
 public:
 
-    LocalTrackViewStandalone(controller::MainControllerStandalone* mainController, int channelID);
+    LocalTrackViewStandalone(controller::MainControllerStandalone* controller,
+                             const QSharedPointer<audio::LocalInputNode>& trackNode);
 
     void setPeakMetersOnlyMode(bool peakMetersOnly) override;
     void setActivatedStatus(bool unlighted) override;
@@ -32,13 +34,14 @@ public:
         return fxPanel;
     }
 
-    qint32 getPluginFreeSlotIndex() const;
+    qint32 getPluginSlotIndex(const QSharedPointer<Plugin> &plugin) const;
+    qint32 getPluginSlotCount() const;
 
     void reset() override;
 
     void addPlugin(const QSharedPointer<audio::Plugin> &plugin, quint32 slotIndex, bool bypassed = false);
-
-    QList<QSharedPointer<audio::Plugin>> getInsertedPlugins() const;
+    void swapPlugins(quint32 firstSlotIndex, quint32 secondSlotIndex);
+    void removePlugin(const QSharedPointer<audio::Plugin> &plugin);
 
     void refreshInputSelectionName();
 
@@ -72,13 +75,17 @@ private slots:
     void openMidiToolsDialog();
     void onMidiToolsDialogClosed();
 
-    void setMidiLowerNote(const QString &lowerNote);
-    void setMidiHigherNote(const QString &higherNote);
+    void setMidiLowerNote(quint8 lowerNote);
+    void setMidiHigherNote(quint8 higherNote);
     void setTranspose(qint8 transposeValue);
 
     void toggleMidiNoteLearn(bool);
 
     void useLearnedMidiNote(quint8 midiNote);
+    void midiActivityDetected(quint8 midiActivityValue);
+    void inputModeChanged(audio::LocalInputMode inputMode, void* sender);
+    void audioInputPropsChanged(audio::LocalAudioInputProps audioInputProps, void* sender);
+    void midiInputPropsChanged(audio::MidiInputProps midiInputProps, void* sender);
 
 private:
     controller::MainControllerStandalone* controller; //a 'casted' pointer just for convenience
@@ -101,20 +108,20 @@ private:
 
     MidiActivityMeter *midiPeakMeter; // show midi activity
 
+    audio::LocalInputMode inputMode;
+    audio::LocalAudioInputProps audioInputProps;
+    audio::MidiInputProps midiInputProps;
+    quint8 midiActivityValue;
+
     void setMidiPeakMeterVisibility(bool visible);
 
     QString getInputChannelNameOnly(int inputIndex); // return the input channel name without the number/index
-
-    quint8 getMidiNoteNumber(const QString &midiNote) const;
-    QString getMidiNoteText(quint8 midiNoteNumber) const;
 
     void startMidiNoteLearn();
     void stopMidiNoteLearn();
 
     bool canShowMidiToolsButton() const;
     bool canShowInputTypeIcon() const;
-
-    bool isFirstSubchannel() const;
 
     void updateInputText();
     void updateInputIcon();

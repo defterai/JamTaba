@@ -266,9 +266,11 @@ MetronomePanel *NinjamRoomWindow::createMetronomePanel()
 {
     auto panel = new MetronomePanel(this);
 
-    float initialMetronomeGain = mainController->getSettings().getMetronomeGain();
-    float initialMetronomePan = mainController->getSettings().getMetronomePan();
-    bool initialMetronomeMuteStatus = mainController->getSettings().getMetronomeMuteStatus();
+    const auto& metronomeSettings = mainController->getSettings().metronomeSettings;
+
+    float initialMetronomeGain = metronomeSettings.getGain();
+    float initialMetronomePan = metronomeSettings.getPan();
+    bool initialMetronomeMuteStatus = metronomeSettings.isMuted();
 
     panel->setGainSliderValue(100 * initialMetronomeGain);
     panel->setPanSliderValue(4 * initialMetronomePan);
@@ -361,25 +363,35 @@ void NinjamRoomWindow::setMetronomePanSliderPosition(int value)
     if (!metronomePanel)
         return;
 
-    float sliderValue = value/(float)metronomePanel->getPanSliderMaximumValue();
-    mainController->setTrackPan(controller::NinjamController::METRONOME_TRACK_ID, sliderValue);
+    auto metronomeTrack = mainController->getNinjamController()->getMetronomeTrack();
+    if (metronomeTrack) {
+        float sliderValue = value/ (float)metronomePanel->getPanSliderMaximumValue();
+        metronomeTrack->postPan(sliderValue, this);
+    }
 }
 
 void NinjamRoomWindow::setMetronomeFaderPosition(int value)
 {
-    mainController->setTrackGain(controller::NinjamController::METRONOME_TRACK_ID, value/100.0);
+    auto metronomeTrack = mainController->getNinjamController()->getMetronomeTrack();
+    if (metronomeTrack) {
+        metronomeTrack->postGain(Utils::linearGainToPower(value / 100.0), this);
+    }
 }
 
-void NinjamRoomWindow::toggleMetronomeMuteStatus()
+void NinjamRoomWindow::toggleMetronomeMuteStatus(bool enabled)
 {
-    mainController->setTrackMute(controller::NinjamController::METRONOME_TRACK_ID, !mainController->trackIsMuted(
-                                     controller::NinjamController::METRONOME_TRACK_ID));
+    auto metronomeTrack = mainController->getNinjamController()->getMetronomeTrack();
+    if (metronomeTrack) {
+        metronomeTrack->postMute(enabled, this);
+    }
 }
 
-void NinjamRoomWindow::toggleMetronomeSoloStatus()
+void NinjamRoomWindow::toggleMetronomeSoloStatus(bool enabled)
 {
-    mainController->setTrackSolo(controller::NinjamController::METRONOME_TRACK_ID, !mainController->trackIsSoloed(
-                                     controller::NinjamController::METRONOME_TRACK_ID));
+    auto metronomeTrack = mainController->getNinjamController()->getMetronomeTrack();
+    if (metronomeTrack) {
+        metronomeTrack->postSolo(enabled, this);
+    }
 }
 
 void NinjamRoomWindow::resetBpiComboBox()
@@ -406,12 +418,14 @@ void NinjamRoomWindow::updatePeaks()
     if (!metronomePanel)
         return;
 
-    auto metronomePeak = mainController->getTrackPeak(controller::NinjamController::METRONOME_TRACK_ID);
-
-    metronomePanel->setMetronomePeaks(metronomePeak.getLeftPeak(),
-                                   metronomePeak.getRightPeak(),
-                                   metronomePeak.getLeftRMS(),
-                                   metronomePeak.getRightRMS());
+    auto metronomeTrack = mainController->getNinjamController()->getMetronomeTrack();
+    if (metronomeTrack) {
+        auto metronomePeak = metronomeTrack->getLastPeak();
+        metronomePanel->setMetronomePeaks(metronomePeak.getLeftPeak(),
+                                       metronomePeak.getRightPeak(),
+                                       metronomePeak.getLeftRMS(),
+                                       metronomePeak.getRightRMS());
+    }
 }
 
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -425,20 +439,13 @@ void NinjamRoomWindow::hideIntervalDownloadingProgressBar(long trackID)
 
 void NinjamRoomWindow::updateIntervalDownloadingProgressBar(long trackID)
 {
-    auto node = mainController->getTrackNode(trackID).dynamicCast<NinjamTrackNode>();
     NinjamTrackView *trackView = getTrackViewByID(trackID);
-    if (node && trackView) {
-        bool waitingToPlayTheFirstInterval = !node->isPlaying();
+    if (trackView) {
+        auto node = trackView->getTrack<NinjamTrackNode>();
+        bool waitingToPlayTheFirstInterval = node && !node->isPlaying();
         if (waitingToPlayTheFirstInterval)
             trackView->incrementDownloadedChunks();
     }
-}
-
-void NinjamRoomWindow::setChannelXmitStatus(long channelID, bool transmiting)
-{
-    NinjamTrackView *trackView = getTrackViewByID(channelID);
-    if (trackView)
-        trackView->setActivatedStatus(!transmiting);
 }
 
 void NinjamRoomWindow::removeChannel(const User &user, const UserChannel &channel, long channelID)
@@ -447,12 +454,15 @@ void NinjamRoomWindow::removeChannel(const User &user, const UserChannel &channe
     if (group) {
         if (group->getTracksCount() == 1) { // removing the last track, the group is removed too
             trackGroups.remove(user.getFullName());
+            trackIndex.remove(group->getTrack<NinjamTrackView>(0)->getTrackID());
             ui->tracksPanel->layout()->removeWidget(group);
             group->deleteLater();
         } else { // remove one subchannel
-            auto trackView = BaseTrackView::getTrackViewByID(channelID);
-            if (trackView)
-                group->removeTrackView(trackView);
+            auto it = trackIndex.find(channelID);
+            if (it != trackIndex.end()) {
+                group->removeTrackView(it.value());
+                trackIndex.erase(it);
+            }
         }
 
         qCDebug(jtNinjamGUI) << "channel removed:" << channel.getName();
@@ -465,7 +475,8 @@ void NinjamRoomWindow::removeChannel(const User &user, const UserChannel &channe
 
 NinjamTrackView *NinjamRoomWindow::getTrackViewByID(long trackID)
 {
-    return dynamic_cast<NinjamTrackView *>(NinjamTrackView::getTrackViewByID(trackID));
+    auto it = trackIndex.find(trackID);
+    return it != trackIndex.end() ? it.value() : nullptr;
 }
 
 void NinjamRoomWindow::changeChannel(const User &, const UserChannel &channel, long channelID)
@@ -476,7 +487,7 @@ void NinjamRoomWindow::changeChannel(const User &, const UserChannel &channel, l
     auto trackView = getTrackViewByID(channelID);
     if (trackView) {
         trackView->setChannelName(channel.getName());
-        trackView->setChannelMode(channel.isVoiceChatChannel() ? NinjamTrackNode::VoiceChat : NinjamTrackNode::Intervalic);
+        trackView->setChannelMode(channel.isVoiceChatChannel() ? NinjamTrackNode::ChannelMode::VoiceChat : NinjamTrackNode::ChannelMode::Intervalic);
     }
 }
 
@@ -569,7 +580,7 @@ void NinjamRoomWindow::addChannel(const User &user, const UserChannel &channel, 
 
     if (!trackGroups.contains(user.getFullName())) { // first channel from this user?
         auto channelName = channel.getName();
-        auto channelMode = channel.isVoiceChatChannel() ? NinjamTrackNode::VoiceChat : NinjamTrackNode::Intervalic;
+        auto channelMode = channel.isVoiceChatChannel() ? NinjamTrackNode::ChannelMode::VoiceChat : NinjamTrackNode::ChannelMode::Intervalic;
         auto userColor = usersColorsPool->get(user.getName()); // the user channel and your chat messages are painted with same color
         auto trackGroupView = new NinjamTrackGroupView(mainController, channelID, channelName,
                                                        channelMode, userColor, cacheEntry);
@@ -586,11 +597,11 @@ void NinjamRoomWindow::addChannel(const User &user, const UserChannel &channel, 
         if (trackGroup) {
             auto ninjamTrackView = trackGroup->addTrackView(channelID);
             ninjamTrackView->setChannelName(channel.getName());
-            ninjamTrackView->setChannelMode(channel.isVoiceChatChannel() ? NinjamTrackNode::VoiceChat : NinjamTrackNode::Intervalic);
+            ninjamTrackView->setChannelMode(channel.isVoiceChatChannel() ? NinjamTrackNode::ChannelMode::VoiceChat : NinjamTrackNode::ChannelMode::Intervalic);
             ninjamTrackView->setInitialValues(cacheEntry);
             ninjamTrackView->setEstimatedChunksPerInterval(calculateEstimatedChunksPerInterval());
             ninjamTrackView->setActivatedStatus(true); /** disabled/grayed until receive the first bytes. When the first bytes
-            are downloaded the 'on_channelXmitChanged' slot is executed and this track is enabled.*/
+            are downloaded the 'xmitStateChanged' slot is executed and this track is enabled.*/
         }
     }
 
@@ -602,6 +613,7 @@ void NinjamRoomWindow::addChannel(const User &user, const UserChannel &channel, 
             auto *lastTrack = groupView->getTrack<NinjamTrackView>(trackCount - 1);
             if (lastTrack != nullptr) {
                 lastTrack->setNinjamChannelData(user.getFullName(), channel.getIndex());
+                trackIndex.insert(channelID, lastTrack);
             }
         }
     }
@@ -704,8 +716,7 @@ void NinjamRoomWindow::handleAccentBeatsComboChange(int index)
     } else {
         ninjamPanel->setAccentBeatsReadOnly(true);
         ninjamPanel->setAccentBeatsVisible(false);
-        int currentBpi = mainController->getNinjamController()->getCurrentBpi();
-        mainController->getNinjamController()->setMetronomeBeatsPerAccent(accentBeatsCb, currentBpi);
+        mainController->getNinjamController()->setMetronomeBeatsPerAccent(accentBeatsCb);
     }
 }
 
@@ -756,8 +767,6 @@ void NinjamRoomWindow::setupSignals(controller::NinjamController* ninjamControll
 
     connect(ninjamController, &NinjamController::channelAudioFullyDownloaded, this, &NinjamRoomWindow::hideIntervalDownloadingProgressBar);
 
-    connect(ninjamController, &NinjamController::channelXmitChanged, this, &NinjamRoomWindow::setChannelXmitStatus);
-
     connect(ninjamController, &NinjamController::currentBpiChanged, this, &NinjamRoomWindow::handleBpiChanges);
     connect(ninjamController, &NinjamController::currentBpmChanged, this, &NinjamRoomWindow::handleBpmChanges);
 
@@ -786,7 +795,7 @@ void NinjamRoomWindow::showChordProgressionDialog(const ChordProgression &curren
     }
 }
 
-void NinjamRoomWindow::setVideoInterval(const User &user, const QByteArray &encodedVideoData)
+void NinjamRoomWindow::setVideoInterval(const User &user, const QSharedPointer<QByteArray>& encodedVideoData)
 {
     auto group = trackGroups[user.getFullName()];
     if (group) {

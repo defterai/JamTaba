@@ -7,7 +7,6 @@
 #include <cassert>
 #include <QDebug>
 #include "midi/MidiDriver.h"
-#include <QMutexLocker>
 
 #include "audio/Resampler.h"
 
@@ -19,7 +18,13 @@ using audio::AudioNodeProcessor;
 const double AudioNode::ROOT_2_OVER_2 = 1.414213562373095 * 0.5;
 const double AudioNode::PI_OVER_2 = 3.141592653589793238463 * 0.5;
 
-void AudioNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, std::vector<midi::MidiMessage> &midiBuffer)
+QAtomicInt AudioNode::LAST_FREE_ID = 1;
+
+int AudioNode::generateNodeId() {
+    return AudioNode::LAST_FREE_ID++;
+}
+
+void AudioNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out, std::vector<midi::MidiMessage> &midiBuffer)
 {
     Q_UNUSED(in);
 
@@ -29,35 +34,8 @@ void AudioNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out, in
     internalInputBuffer.setFrameLenght(out.getFrameLenght());
     internalOutputBuffer.setFrameLenght(out.getFrameLenght());
 
-    {
-        QMutexLocker locker(&mutex);
-        for (auto node : qAsConst(connections)) { // ask connected nodes to generate audio
-            node->processReplacing(internalInputBuffer, internalOutputBuffer, sampleRate, midiBuffer);
-        }
-    }
-
-    internalOutputBuffer.set(internalInputBuffer); // if we have no plugins inserted the input samples are just copied  to output buffer.
-
-    static SamplesBuffer tempInputBuffer(2);
-
     // process inserted plugins
-    for (int i=0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        auto processor = processors[i];
-        if (processor && !processor->isBypassed()) {
-            tempInputBuffer.setFrameLenght(internalOutputBuffer.getFrameLenght());
-            tempInputBuffer.set(internalOutputBuffer); // the output from previous plugin is used as input to the next plugin in the chain
-
-            processor->process(tempInputBuffer, internalOutputBuffer, midiBuffer);
-
-            // some plugins are blocking the midi messages. If a VSTi can't generate messages the previous messages list will be sended for the next plugin in the chain. The messages list is cleared only when the plugin can generate midi messages.
-            if (processor->isVirtualInstrument() && processor->canGenerateMidiMessages())
-                midiBuffer.clear(); // only the fresh messages will be passed by the next plugin in the chain
-
-
-            auto pulledMessages = pullMidiMessagesGeneratedByPlugins();
-            midiBuffer.insert(midiBuffer.end(), pulledMessages.begin(), pulledMessages.end());
-        }
-    }
+    pluginsProcess(internalInputBuffer, internalOutputBuffer, midiBuffer);
 
     preFaderProcess(internalOutputBuffer); //call overrided preFaderProcess in subclasses to allow some preFader process.
 
@@ -68,6 +46,8 @@ void AudioNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out, in
     postFaderProcess(internalOutputBuffer);
 
     out.add(internalOutputBuffer);
+
+    emit audioPeakChanged(lastPeak);
 }
 
 void AudioNode::setRmsWindowSize(int samples)
@@ -75,13 +55,14 @@ void AudioNode::setRmsWindowSize(int samples)
     internalOutputBuffer.setRmsWindowSize(samples);
 }
 
-AudioNode::AudioNode() :
+AudioNode::AudioNode(int sampleRate) :
     internalInputBuffer(2),
     internalOutputBuffer(2),
-    lastPeak(),
     pan(0),
     leftGain(1.0),
     rightGain(1.0),
+    id(generateNodeId()),
+    sampleRate(sampleRate),
     muted(false),
     soloed(false),
     activated(true),
@@ -89,15 +70,23 @@ AudioNode::AudioNode() :
     boost(1),
     resamplingCorrection(0)
 {
+    Q_ASSERT(sampleRate > 0);
 
-    for (int i=0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        processors[i] = nullptr;
-    }
+    setRmsWindowSize(audio::SamplesBuffer::computeRmsWindowSize(sampleRate));
+
+    connect(this, &AudioNode::postSetActivated, this, &AudioNode::setActivated);
+    connect(this, &AudioNode::postReset, this, &AudioNode::reset);
+    connect(this, &AudioNode::postGain, this, &AudioNode::setGain);
+    connect(this, &AudioNode::postPan, this, &AudioNode::setPan);
+    connect(this, &AudioNode::postBoost, this, &AudioNode::setBoost);
+    connect(this, &AudioNode::postMute, this, &AudioNode::setMute);
+    connect(this, &AudioNode::postSolo, this, &AudioNode::setSolo);
+    connect(this, &AudioNode::postResetLastPeak, this, &AudioNode::resetLastPeak);
 }
 
-std::vector<midi::MidiMessage> AudioNode::pullMidiMessagesGeneratedByPlugins() const
+AudioNode::~AudioNode()
 {
-    return std::vector<midi::MidiMessage>(); // returning empty vector by default, is overrided in LocalInputNode
+
 }
 
 int AudioNode::getInputResamplingLength(int sourceSampleRate, int targetSampleRate, int outFrameLenght)
@@ -124,51 +113,75 @@ AudioPeak AudioNode::getLastPeak() const
 void AudioNode::resetLastPeak()
 {
     lastPeak.zero();
+    emit audioPeakChanged(lastPeak);
 }
 
-void AudioNode::setPan(float pan)
+void AudioNode::setPan(float pan, void* sender)
 {
-    if (pan < -1)
+    if (pan < -1) {
         pan = -1;
-
-    if (pan > 1)
+    } else if (pan > 1) {
         pan = 1;
-
-    this->pan = pan;
-
-    updateGains();
-
-    emit panChanged(this->pan);
+    }
+    if (!qFuzzyCompare(this->pan, pan)) {
+        this->pan = pan;
+        updateGains();
+        emit panChanged(pan, sender);
+    }
 }
 
-void AudioNode::setGain(float gainValue)
+void AudioNode::setGain(float gainValue, void* sender)
 {
-    this->gain = gainValue;
-
-    emit gainChanged(this->gain);
+    if (!qFuzzyCompare(this->gain, gainValue)) {
+        this->gain = gainValue;
+        emit gainChanged(gainValue, sender);
+    }
 }
 
-void AudioNode::setBoost(float boostValue)
+void AudioNode::setBoost(float boostValue, void* sender)
 {
-    this->boost = boostValue;
-
-    emit boostChanged(this->boost);
+    if (!qFuzzyCompare(this->boost, boostValue)) {
+        this->boost = boostValue;
+        emit boostChanged(boostValue, sender);
+    }
 }
 
-void AudioNode::setMute(bool muteStatus)
+void AudioNode::setMute(bool muteStatus, void* sender)
 {
     if (this->muted != muteStatus) {
         this->muted = muteStatus;
-        emit muteChanged(muteStatus);
+        emit muteChanged(muteStatus, sender);
+        if (muteStatus) {
+            resetLastPeak();
+        }
     }
 }
 
-void AudioNode::setSolo(bool soloed)
+bool AudioNode::setSampleRate(int sampleRate)
+{
+    if (sampleRate <= 0) {
+        qCritical() << "Wrong track sample rate: " << sampleRate;
+        return false;
+    }
+    if (this->sampleRate != sampleRate) {
+        this->sampleRate = sampleRate;
+        setRmsWindowSize(audio::SamplesBuffer::computeRmsWindowSize(sampleRate));
+        return true;
+    }
+    return false;
+}
+
+void AudioNode::setSolo(bool soloed, void* sender)
 {
     if (this->soloed != soloed) {
         this->soloed = soloed;
-        emit soloChanged(this->soloed);
+        emit soloChanged(soloed, sender);
     }
+}
+
+void AudioNode::setActivated(bool activated)
+{
+    this->activated = activated;
 }
 
 void AudioNode::reset()
@@ -185,69 +198,4 @@ void AudioNode::updateGains()
     double angle = pan * PI_OVER_2 * 0.5;
     leftGain = (float)(ROOT_2_OVER_2 * (cos(angle) - sin(angle)));
     rightGain = (float)(ROOT_2_OVER_2 * (cos(angle) + sin(angle)));
-}
-
-AudioNode::~AudioNode()
-{
-
-}
-
-bool AudioNode::connect(AudioNode &other)
-{
-    QMutexLocker(&(other.mutex));
-
-    other.connections.insert(this);
-
-    return true;
-}
-
-bool AudioNode::disconnect(AudioNode &otherNode)
-{
-    QMutexLocker(&(otherNode.mutex));
-    otherNode.connections.remove(this);
-    return true;
-}
-
-void AudioNode::addProcessor(const QSharedPointer<AudioNodeProcessor> &newProcessor, quint32 slotIndex)
-{
-    assert(newProcessor);
-    assert(slotIndex < MAX_PROCESSORS_PER_TRACK);
-    processors[slotIndex] = newProcessor;
-}
-
-void AudioNode::removeProcessor(const QSharedPointer<AudioNodeProcessor> &processor)
-{
-    assert(processor);
-    processor->suspend();
-    for (int i = 0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        if (processors[i] == processor){
-            processors[i] = nullptr;
-            break;
-        }
-    }
-}
-
-void AudioNode::suspendProcessors()
-{
-    for (int i = 0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        if (processors[i])
-            processors[i]->suspend();
-    }
-}
-
-void AudioNode::updateProcessorsGui()
-{
-    QMutexLocker locker(&mutex);
-    for (int i = 0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        if (processors[i])
-            processors[i]->updateGui();
-    }
-}
-
-void AudioNode::resumeProcessors()
-{
-    for (int i = 0; i < MAX_PROCESSORS_PER_TRACK; ++i) {
-        if (processors[i])
-            processors[i]->resume();
-    }
 }
