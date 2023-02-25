@@ -12,11 +12,6 @@
 #include <QLabel>
 #include <QSpacerItem>
 
-/*namespace audio {
-enum class LocalInputMode;
-class MidiInputProps;
-}*/
-
 class LocalTrackViewStandalone : public LocalTrackView
 {
     Q_OBJECT
@@ -46,8 +41,7 @@ public:
 
     void addPlugin(const QSharedPointer<audio::Plugin> &plugin, quint32 slotIndex, bool bypassed = false);
     void swapPlugins(quint32 firstSlotIndex, quint32 secondSlotIndex);
-
-    QList<QSharedPointer<audio::Plugin>> getInsertedPlugins() const;
+    void removePlugin(const QSharedPointer<audio::Plugin> &plugin);
 
     void refreshInputSelectionName();
 
@@ -88,6 +82,7 @@ private slots:
     void toggleMidiNoteLearn(bool);
 
     void useLearnedMidiNote(quint8 midiNote);
+    void midiActivityDetected(quint8 midiActivityValue);
     void inputModeChanged(audio::LocalInputMode inputMode, void* sender);
     void audioInputPropsChanged(audio::LocalAudioInputProps audioInputProps, void* sender);
     void midiInputPropsChanged(audio::MidiInputProps midiInputProps, void* sender);
@@ -116,6 +111,7 @@ private:
     audio::LocalInputMode inputMode;
     audio::LocalAudioInputProps audioInputProps;
     audio::MidiInputProps midiInputProps;
+    quint8 midiActivityValue;
 
     void setMidiPeakMeterVisibility(bool visible);
 
@@ -126,8 +122,6 @@ private:
 
     bool canShowMidiToolsButton() const;
     bool canShowInputTypeIcon() const;
-
-    bool isFirstSubchannel() const;
 
     void updateInputText();
     void updateInputIcon();

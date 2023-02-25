@@ -12,19 +12,14 @@ class PortAudioDriver final : public AudioDriver
 {
 
 public:
-    static QSharedPointer<PortAudioDriver> CreateInstance(controller::MainController *mainController,
-                                                          QString audioInputDevice, QString audioOutputDevice,
-                                                          int firstInputIndex, int lastInputIndex, int firstOutputIndex,
-                                                          int lastOutputIndex, int sampleRate, int bufferSize);
+    static QSharedPointer<PortAudioDriver> CreateInstance();
     static QSharedPointer<PortAudioDriver> GetInstance();
 
-    PortAudioDriver(controller::MainController *mainController,
-                    QString audioInputDevice, QString audioOutputDevice,
-                    int firstInputIndex, int lastInputIndex, int firstOutputIndex,
-                    int lastOutputIndex, int sampleRate, int bufferSize);
-
+    PortAudioDriver();
     virtual ~PortAudioDriver();
 
+    bool initialize() override;
+    bool configure(persistence::AudioSettings& settings) override;
     bool start() override;
     void stop(bool refreshDevicesList = false) override;
     void release() override;

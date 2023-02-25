@@ -332,7 +332,7 @@ public:
         return GUID;
     }
 
-    inline const QByteArray& getEncodedData() const
+    inline const QSharedPointer<QByteArray>& getEncodedData() const
     {
         return encodedData;
     }
@@ -345,7 +345,7 @@ public:
 private:
     MessageGuid GUID;
     quint8 flags;
-    QByteArray encodedData;
+    QSharedPointer<QByteArray> encodedData;
 };
 
 // ++++++++++++++++++++

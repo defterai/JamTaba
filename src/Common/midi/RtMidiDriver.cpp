@@ -231,7 +231,7 @@ std::vector<MidiMessage> RtMidiDriver::getBuffer()
 {
     std::vector<midi::MidiMessage> buffer;
     int deviceIndex = 0;
-    for (auto stream : midiInStreams) {
+    for (auto stream : qAsConst(midiInStreams)) {
         consumeMessagesFromStream(stream, deviceIndex, buffer);
         deviceIndex++;
     }

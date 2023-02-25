@@ -4,17 +4,25 @@
 
 using midi::MidiMessage;
 
+static void registerQtMetaType() {
+    static bool registered = false;
+    if (!registered) {
+        qRegisterMetaType<MidiMessage>();
+        registered = true;
+    }
+}
+
 MidiMessage::MidiMessage(qint32 data, int sourceID) :
     data(data),
     sourceID(sourceID)
 {
-
+    registerQtMetaType();
 }
 
 MidiMessage::MidiMessage() :
     MidiMessage(-1, -1)
 {
-
+    registerQtMetaType();
 }
 
 MidiMessage MidiMessage::fromVector(std::vector<unsigned char> vector, qint32 deviceIndex)

@@ -16,6 +16,7 @@ class AudioEncoder
         virtual QByteArray finishIntervalEncoding() = 0;
         virtual int getChannels() const = 0;
         virtual int getSampleRate() const = 0;
+        virtual float getQuality() const = 0;
 };
 
 #endif

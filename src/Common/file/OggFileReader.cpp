@@ -17,7 +17,7 @@ bool OggFileReader::read(const QString &filePath, SamplesBuffer &outBuffer, quin
     }
 
     vorbis::Decoder decoder;
-    decoder.setInputData(oggFile.readAll());
+    decoder.setInputData(QSharedPointer<QByteArray>::create(oggFile.readAll()));
     decoder.initialize(); // read the ogg headers from file
     sampleRate = decoder.getSampleRate();
     if (decoder.isMono())

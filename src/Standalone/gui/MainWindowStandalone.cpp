@@ -222,7 +222,9 @@ void MainWindowStandalone::toggleFullScreen()
 // sanitize the input selection for each loaded subchannel
 void MainWindowStandalone::sanitizeSubchannelInputSelections(LocalTrackView *subChannelView, const SubChannel &subChannel)
 {
-    int trackID = subChannelView->getInputIndex();
+    auto inputNode = subChannelView->getInputNode();
+    if (!inputNode) return;
+
     if (subChannel.isMidi()) {
         audio::MidiInputProps midiInputProps;
         midiInputProps.setTranspose(subChannel.getTranspose());
@@ -231,23 +233,23 @@ void MainWindowStandalone::sanitizeSubchannelInputSelections(LocalTrackView *sub
         if (midiDeviceIsValid(subChannel.getMidiDevice())) {
             midiInputProps.setDevice(subChannel.getMidiDevice());
             midiInputProps.setChannel(subChannel.getMidiChannel());
-            controller->setInputTrackToMIDI(trackID, midiInputProps);
+            controller->setInputTrackToMIDI(inputNode, midiInputProps);
         } else {
             if (controller->getMidiDriver()->hasInputDevices()) {
                 // use the first midi device and receiving from all channels
                 midiInputProps.setDevice(0);
                 midiInputProps.setChannel(-1);
-                controller->setInputTrackToMIDI(trackID, midiInputProps);
+                controller->setInputTrackToMIDI(inputNode, midiInputProps);
             } else {
-                controller->setInputTrackToNoInput(trackID);
+                controller->setInputTrackToNoInput(inputNode);
             }
         }
     } else if (subChannel.isNoInput()) {
-        controller->setInputTrackToNoInput(trackID);
+        controller->setInputTrackToNoInput(inputNode);
     } else if (subChannel.isMono()) {
-        controller->setInputTrackToMono(trackID, subChannel.getFirstInput());
+        controller->setInputTrackToMono(inputNode, subChannel.getFirstInput());
     } else {
-        controller->setInputTrackToStereo(trackID, subChannel.getFirstInput());
+        controller->setInputTrackToStereo(inputNode, subChannel.getFirstInput());
     }
 }
 
@@ -259,11 +261,9 @@ void MainWindowStandalone::restoreLocalSubchannelPluginsList(
         auto category = static_cast<audio::PluginDescriptor::Category>(plugin.getCategory());
 
         audio::PluginDescriptor descriptor(plugin.getName(), category, plugin.getManufacturer(), plugin.getPath());
-        quint32 inputTrackIndex = subChannelView->getInputIndex();
         qint32 pluginSlotIndex = subChannelView->getPluginSlotIndex(nullptr);
         if (pluginSlotIndex >= 0) {
-            auto pluginInstance
-                = controller->addPlugin(inputTrackIndex, pluginSlotIndex, descriptor);
+            auto pluginInstance = controller->createPluginInstance(descriptor);
             if (pluginInstance) {
                 try
                 {
@@ -300,52 +300,6 @@ void MainWindowStandalone::initializeLocalSubChannel(LocalTrackView *subChannelV
 LocalTrackGroupViewStandalone *MainWindowStandalone::createLocalTrackGroupView(int channelGroupIndex)
 {
     return new LocalTrackGroupViewStandalone(channelGroupIndex, this);
-}
-
-QList<persistence::Plugin> buildPersistentPluginList(QList<QSharedPointer<audio::Plugin>> trackPlugins)
-{
-    QList<persistence::Plugin> persistentPlugins;
-    for (const auto& p : trackPlugins) {
-        auto plugin = persistence::Plugin::Builder(p->getDescriptor())
-                .setBypassed(p->isBypassed())
-                .setData(p->getSerializedData())
-                .build();
-        persistentPlugins.append(plugin);
-    }
-    return persistentPlugins;
-}
-
-LocalInputTrackSettings MainWindowStandalone::getInputsSettings() const
-{
-    // the base class is returning just the basic: gain, mute, pan , etc for each channel and subchannel
-    LocalInputTrackSettings baseSettings = MainWindow::getInputsSettings();
-
-    // recreate the settings including the plugins
-    LocalInputTrackSettings::Builder settingsBuilder;
-    Q_ASSERT(getChannelGroupsCount() == baseSettings.getChannels().size());
-
-    int channelID = 0;
-    for (const Channel &channel : baseSettings.getChannels()) {
-        auto trackGroupView = getLocalChannel<LocalTrackGroupViewStandalone>(channelID++);
-        if (!trackGroupView)
-            continue;
-        Channel::Builder channelBuilder;
-        channelBuilder.setInstrumentIndex(channel.getInstrumentIndex());
-        int subChannelID = 0;
-        for (const SubChannel& subchannel : channel.getSubChannels()) {
-            SubChannel newSubChannel = subchannel;
-            LocalTrackViewStandalone *trackView = trackGroupView->getTrack<LocalTrackViewStandalone>(subChannelID);
-            if (trackView) {
-                newSubChannel.setPlugins(buildPersistentPluginList(trackView->getInsertedPlugins()));
-            }
-            subChannelID++;
-            channelBuilder.addSubChannel(newSubChannel);
-        }
-
-        settingsBuilder.addChannel(channelBuilder.build());
-    }
-
-    return settingsBuilder.build();
 }
 
 NinjamRoomWindow *MainWindowStandalone::createNinjamWindow(const login::RoomInfo &roomInfo, MainController *mainController)

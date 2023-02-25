@@ -2,8 +2,10 @@
 #define STANDALONEMAINCONTROLLER_H
 
 #include "MainController.h"
+#include "audio/core/SamplesBuffer.h"
 #include <QApplication>
 #include <QSharedPointer>
+#include <QFutureInterface>
 
 #ifdef Q_OS_MAC
     #include "AU/AudioUnitPluginFinder.h"
@@ -89,10 +91,10 @@ namespace controller
 
         QString getJamtabaFlavor() const override;
 
-        void setInputTrackToMono(int localChannelIndex, int inputIndexInAudioDevice);
-        void setInputTrackToStereo(int localChannelIndex, int firstInputIndex);
-        void setInputTrackToMIDI(int localChannelIndex, const audio::MidiInputProps& midiInpuProps);
-        void setInputTrackToNoInput(int localChannelIndex);
+        void setInputTrackToMono(const QSharedPointer<audio::LocalInputNode>& inputTrack, int inputIndexInAudioDevice);
+        void setInputTrackToStereo(const QSharedPointer<audio::LocalInputNode>& inputTrack, int firstInputIndex);
+        void setInputTrackToMIDI(const QSharedPointer<audio::LocalInputNode>& inputTrack, const audio::MidiInputProps& midiInpuProps);
+        void setInputTrackToNoInput(const QSharedPointer<audio::LocalInputNode>& inputTrack);
 
         bool isUsingNullAudioDriver() const;
 
@@ -107,14 +109,12 @@ namespace controller
             return vstPluginFinder.data();
         }
 
-        void removePlugin(int inputTrackIndex, const QSharedPointer<Plugin> &plugin);
         QMap<QString, QList<PluginDescriptor> > getPluginsDescriptors(
             PluginDescriptor::Category category);
-        QSharedPointer<Plugin> addPlugin(quint32 inputTrackIndex, quint32 pluginSlotIndex,
-                                         const PluginDescriptor &descriptor);
-        void swapPlugins(quint32 inputTrackIndex, quint32 firstSlotIndex, quint32 secondSlotIndex);
 
-        std::vector<midi::MidiMessage> pullMidiMessagesFromPlugins() override;
+        QVector<midi::MidiMessage> pullMidiMessagesFromPlugins() override;
+
+        QSharedPointer<Plugin> createPluginInstance(const PluginDescriptor &descriptor);
 
     public slots:
         void startMidiClock() const override;
@@ -141,7 +141,7 @@ namespace controller
     protected:
         midi::MidiDriver *createMidiDriver();
 
-        QSharedPointer<audio::AudioDriver> createAudioDriver(const persistence::AudioSettings &settings);
+        QSharedPointer<audio::AudioDriver> createAudioDriver();
 
         controller::NinjamController *createNinjamController() override;
 
@@ -150,7 +150,7 @@ namespace controller
         void setupNinjamControllerSignals() override;
         void clearNinjamControllerSignals() override;
 
-        std::vector<midi::MidiMessage> pullMidiMessagesFromDevices() override;
+        QVector<midi::MidiMessage> pullMidiMessagesFromDevices() override;
 
     protected slots:
         void updateBpm(int newBpm) override;
@@ -192,8 +192,6 @@ namespace controller
         // used to sort plugins list
         static bool pluginDescriptorLessThan(const PluginDescriptor &d1,
                                              const PluginDescriptor &d2);
-
-        QSharedPointer<Plugin> createPluginInstance(const PluginDescriptor &descriptor);
 
         void scanVstPlugins(bool scanOnlyNewVstPlugins);
     };

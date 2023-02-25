@@ -19,6 +19,7 @@ LocalTrackViewStandalone::LocalTrackViewStandalone(controller::MainControllerSta
                                                    const QSharedPointer<audio::LocalInputNode>& trackNode) :
     LocalTrackView(trackNode),
     controller(controller),
+    midiActivityValue(0),
     midiToolsDialog(nullptr),
     midiRoutingArrowColor(QColor(255, 0, 0, 100))
 {
@@ -58,6 +59,7 @@ LocalTrackViewStandalone::LocalTrackViewStandalone(controller::MainControllerSta
     this->midiInputProps = trackNode->getMidiInputProps();
 
     connect(trackNode.data(), &audio::LocalInputNode::midiNoteLearned, this, &LocalTrackViewStandalone::useLearnedMidiNote);
+    connect(trackNode.data(), &audio::LocalInputNode::midiActivityDetected, this, &LocalTrackViewStandalone::midiActivityDetected);
     connect(trackNode.data(), &audio::LocalInputNode::inputModeChanged, this, &LocalTrackViewStandalone::inputModeChanged);
     connect(trackNode.data(), &audio::LocalInputNode::audioInputPropsChanged, this, &LocalTrackViewStandalone::audioInputPropsChanged);
     connect(trackNode.data(), &audio::LocalInputNode::midiInputPropsChanged, this, &LocalTrackViewStandalone::midiInputPropsChanged);
@@ -78,7 +80,7 @@ void LocalTrackViewStandalone::setToMidi()
     if (inputNode) {
         midiInputProps.setDevice(0);
         midiInputProps.setChannel(-1);
-        controller->setInputTrackToMIDI(inputNode->getID(), midiInputProps);
+        controller->setInputTrackToMIDI(inputNode, midiInputProps);
         emit trackInputChanged();
     }
 }
@@ -195,6 +197,13 @@ void LocalTrackViewStandalone::useLearnedMidiNote(quint8 midiNote)
     }
 }
 
+void LocalTrackViewStandalone::midiActivityDetected(quint8 midiActivityValue)
+{
+    if (this->midiActivityValue < midiActivityValue) {
+        this->midiActivityValue = midiActivityValue;
+    }
+}
+
 void LocalTrackViewStandalone::inputModeChanged(audio::LocalInputMode inputMode, void* sender)
 {
     if (sender != this) {
@@ -210,6 +219,7 @@ void LocalTrackViewStandalone::audioInputPropsChanged(audio::LocalAudioInputProp
     if (sender != this) {
         this->audioInputProps = audioInputProps;
         updateInputIcon();
+        updateInputText();
     }
 }
 
@@ -218,6 +228,7 @@ void LocalTrackViewStandalone::midiInputPropsChanged(audio::MidiInputProps midiI
     if (sender != this) {
         this->midiInputProps = midiInputProps;
         updateInputIcon();
+        updateInputText();
     }
 }
 
@@ -225,11 +236,9 @@ void LocalTrackViewStandalone::updateGuiElements()
 {
     LocalTrackView::updateGuiElements();
 
-    auto inputNode = getInputNode();
-    if (inputNode && inputNode->hasMidiActivity()) {
-        quint8 midiActivityValue = inputNode->getMidiActivityValue();
-        midiPeakMeter->setActivityValue(midiActivityValue/127.0);
-        inputNode->resetMidiActivity();
+    if (midiActivityValue != 0) {
+        midiPeakMeter->setActivityValue(midiActivityValue / 127.0);
+        midiActivityValue = 0;
     }
 
     if (midiPeakMeter->isVisible()) {
@@ -327,17 +336,6 @@ void LocalTrackViewStandalone::setMidiRouting(bool routingMidiToFirstSubchannel)
     }
 }
 
-bool LocalTrackViewStandalone::isFirstSubchannel() const
-{
-    auto inputNode = getInputNode();
-    if (inputNode) {
-        auto inputGroup = inputNode->getChannelGroup();
-        return inputGroup && !inputGroup->isEmpty() &&
-                inputGroup->getInputNode(0) == inputNode;
-    }
-    return false;
-}
-
 void LocalTrackViewStandalone::openMidiToolsDialog()
 {
     if (!midiToolsDialog) {
@@ -349,8 +347,9 @@ void LocalTrackViewStandalone::openMidiToolsDialog()
         bool routingMidiInput = inputNode && inputNode->isRoutingMidiInput();
 
         midiToolsDialog = new MidiToolsDialog(lowerNote, higherNote, transpose, routingMidiInput);
-        if (isFirstSubchannel())
-            midiToolsDialog->hideMidiRoutingControls(); // midi routing is available only in second subchannel
+
+        //if (inputNode && inputNode->isFirstSubchannel())
+        //    midiToolsDialog->hideMidiRoutingControls(); // midi routing is available only in second subchannel
 
         connect(midiToolsDialog, &MidiToolsDialog::dialogClosed, this, &LocalTrackViewStandalone::onMidiToolsDialogClosed);
         connect(midiToolsDialog, &MidiToolsDialog::lowerNoteChanged, this, &LocalTrackViewStandalone::setMidiLowerNote);
@@ -443,6 +442,11 @@ void LocalTrackViewStandalone::addPlugin(const QSharedPointer<audio::Plugin> &pl
         refreshInputSelectionName(); // refresh input type combo box, if the added plugins is a virtual instrument Jamtaba will try auto change the input type to midi
         update();
     }
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        plugin->start();
+        inputNode->addProcessor(plugin, slotIndex);
+    }
 }
 
 void LocalTrackViewStandalone::swapPlugins(quint32 firstSlotIndex, quint32 secondSlotIndex)
@@ -450,6 +454,26 @@ void LocalTrackViewStandalone::swapPlugins(quint32 firstSlotIndex, quint32 secon
     if (fxPanel) {
         fxPanel->swapPlugins(firstSlotIndex, secondSlotIndex);
         update();
+    }
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        inputNode->swapProcessors(firstSlotIndex, secondSlotIndex);
+    }
+}
+
+void LocalTrackViewStandalone::removePlugin(const QSharedPointer<audio::Plugin> &plugin)
+{
+    auto inputNode = getInputNode();
+    if (inputNode) {
+        QString pluginName = plugin->getName();
+        try
+        {
+            inputNode->removeProcessor(plugin);
+        }
+        catch (...)
+        {
+            qCritical() << "Error removing plugin: " << pluginName;
+        }
     }
 }
 
@@ -461,18 +485,6 @@ qint32 LocalTrackViewStandalone::getPluginSlotIndex(const QSharedPointer<Plugin>
 qint32 LocalTrackViewStandalone::getPluginSlotCount() const
 {
     return fxPanel->getItems().length();
-}
-
-QList<QSharedPointer<audio::Plugin>> LocalTrackViewStandalone::getInsertedPlugins() const
-{
-    QList<QSharedPointer<audio::Plugin>> plugins;
-    if (fxPanel) { // can be nullptr in vst plugin
-        for (auto item : fxPanel->getItems()) {
-            if (item->containPlugin())
-                plugins.append(item->getAudioPlugin());
-        }
-    }
-    return plugins;
 }
 
 FxPanel *LocalTrackViewStandalone::createFxPanel()
@@ -815,7 +827,7 @@ void LocalTrackViewStandalone::setToMono(QAction *action)
             setMidiRouting(false);
         }
         int selectedInputIndexInAudioDevice = action->data().toInt();
-        controller->setInputTrackToMono(inputNode->getID(), selectedInputIndexInAudioDevice);
+        controller->setInputTrackToMono(inputNode, selectedInputIndexInAudioDevice);
     }
     setMidiPeakMeterVisibility(false);
     levelSlider->setStereo(false);
@@ -831,7 +843,7 @@ void LocalTrackViewStandalone::setToStereo(QAction *action)
             setMidiRouting(false);
         }
         int firstInputIndexInAudioDevice = action->data().toInt();
-        controller->setInputTrackToStereo(inputNode->getID(), firstInputIndexInAudioDevice);
+        controller->setInputTrackToStereo(inputNode, firstInputIndexInAudioDevice);
     }
     setMidiPeakMeterVisibility(false);
 
@@ -860,7 +872,7 @@ void LocalTrackViewStandalone::setToMidi(QAction *action)
         audio::MidiInputProps props = midiInputProps;
         props.setDevice(midiDeviceIndex);
         props.setChannel(midiChannel);
-        controller->setInputTrackToMIDI(inputNode->getID(), props);
+        controller->setInputTrackToMIDI(inputNode, props);
     }
 
     levelSlider->setStereo(true);

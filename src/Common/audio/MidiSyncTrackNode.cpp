@@ -1,14 +1,16 @@
 #include "MidiSyncTrackNode.h"
 #include "MetronomeUtils.h"
 #include "audio/core/AudioDriver.h"
+#include "audio/IntervalUtils.h"
 #include <algorithm>
 
 using audio::MidiSyncTrackNode;
 using audio::SamplesBuffer;
 
-using namespace controller;
+static const int PULSES_PER_INTERVAL = 24;
 
-MidiSyncTrackNode::MidiSyncTrackNode() :
+MidiSyncTrackNode::MidiSyncTrackNode(int sampleRate) :
+    audio::AudioNode(sampleRate),
     pulsesPerInterval(0),
     samplesPerPulse(0),
     intervalPosition(0),
@@ -17,27 +19,53 @@ MidiSyncTrackNode::MidiSyncTrackNode() :
     running(false),
     hasSentStart(false)
 {
-    resetInterval();
+    connect(this, &MidiSyncTrackNode::postBpi, this, &MidiSyncTrackNode::setBpi);
+    connect(this, &MidiSyncTrackNode::postBpm, this, &MidiSyncTrackNode::setBpm);
+    connect(this, &MidiSyncTrackNode::postSetIntervalPosition, this, &MidiSyncTrackNode::setIntervalPosition);
+    connect(this, &MidiSyncTrackNode::postStart, this, &MidiSyncTrackNode::start);
+    connect(this, &MidiSyncTrackNode::postStop, this, &MidiSyncTrackNode::stop);
 }
 
 MidiSyncTrackNode::~MidiSyncTrackNode()
 {
 }
 
-void MidiSyncTrackNode::setPulseTiming(long pulsesPerInterval, double samplesPerPulse)
-{
-    if (pulsesPerInterval <= 0 || samplesPerPulse <= 0)
-        qCritical() << "invalid sync timing params";
-
-    this->pulsesPerInterval = pulsesPerInterval;
-    this->samplesPerPulse = samplesPerPulse;
-    resetInterval();
-}
-
 void MidiSyncTrackNode::resetInterval()
 {
     intervalPosition = 0;
     lastPlayedPulse = -1;
+}
+
+void MidiSyncTrackNode::setBpi(int bpi)
+{
+    if (this->bpi != bpi) {
+        this->bpi = bpi;
+        updateTimimgParams();
+    }
+}
+
+void MidiSyncTrackNode::setBpm(int bpm)
+{
+    if (this->bpm != bpm) {
+        this->bpm = bpm;
+        updateTimimgParams();
+    }
+}
+
+void MidiSyncTrackNode::updateTimimgParams()
+{
+    if (bpi <= 0 || bpm <= 0)
+        return;
+
+    long pulsesPerInterval = bpi * PULSES_PER_INTERVAL;
+    long samplesPerBeat = audio::intervalUtils::getSamplesPerBeat(bpm, bpi, getSampleRate());
+    double samplesPerPulse = samplesPerBeat / static_cast<double>(PULSES_PER_INTERVAL);
+    if (this->pulsesPerInterval != pulsesPerInterval ||
+            this->samplesPerPulse != samplesPerPulse) {
+        this->pulsesPerInterval = pulsesPerInterval;
+        this->samplesPerPulse = samplesPerPulse;
+        resetInterval();
+    }
 }
 
 void MidiSyncTrackNode::setIntervalPosition(long intervalPosition)
@@ -62,7 +90,7 @@ void MidiSyncTrackNode::stop()
 }
 
 void MidiSyncTrackNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out,
-                                          int SampleRate, std::vector<midi::MidiMessage> &midiBuffer)
+                                         std::vector<midi::MidiMessage> &midiBuffer)
 {
     if (pulsesPerInterval <= 0 || samplesPerPulse <= 0)
         return;
@@ -80,5 +108,14 @@ void MidiSyncTrackNode::processReplacing(const SamplesBuffer &in, SamplesBuffer 
         emit midiClockPulsed();
         lastPlayedPulse++;
     }
-    AudioNode::processReplacing(in, out, SampleRate, midiBuffer);
+    AudioNode::processReplacing(in, out, midiBuffer);
+}
+
+bool MidiSyncTrackNode::setSampleRate(int sampleRate)
+{
+    if (AudioNode::setSampleRate(sampleRate)) {
+        updateTimimgParams();
+        return true;
+    }
+    return false;
 }

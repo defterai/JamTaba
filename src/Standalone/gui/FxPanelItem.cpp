@@ -108,7 +108,7 @@ void FxPanelItem::removePlugin()
     auto detachedPlugin = detachPlugin();
     if (detachedPlugin) {
         detachedPlugin->closeEditor();
-        mainController->removePlugin(localTrackView->getInputIndex(), detachedPlugin);
+        localTrackView->removePlugin(detachedPlugin);
     }
 }
 
@@ -222,8 +222,7 @@ void FxPanelItem::loadSelectedPlugin()
     auto descriptor = audio::PluginDescriptor::fromString(action->data().toString());
     qint32 pluginSlotIndex = localTrackView->getPluginSlotIndex(nullptr); // search empty
     if (pluginSlotIndex >= 0) { // valid plugin slot (-1 will be returned when no free plugin slots are available)
-        quint32 trackIndex = localTrackView->getInputIndex();
-        auto plugin = mainController->addPlugin(trackIndex, pluginSlotIndex, descriptor);
+        auto plugin = mainController->createPluginInstance(descriptor);
         if (plugin) {
             localTrackView->addPlugin(plugin, pluginSlotIndex);
             showPluginGui(plugin.get());
@@ -251,8 +250,6 @@ void FxPanelItem::on_actionMenuTriggered(QAction *action)
             qint32 pluginIndex = localTrackView->getPluginSlotIndex(plugin);
             if (pluginIndex >= 1) {
                 localTrackView->swapPlugins(pluginIndex, pluginIndex - 1);
-                quint32 trackIndex = localTrackView->getInputIndex();
-                mainController->swapPlugins(trackIndex, pluginIndex, pluginIndex - 1);
             }
             break;
         }
@@ -260,8 +257,6 @@ void FxPanelItem::on_actionMenuTriggered(QAction *action)
             qint32 pluginIndex = localTrackView->getPluginSlotIndex(plugin);
             if (pluginIndex >= 0 && pluginIndex < localTrackView->getPluginSlotCount() - 1) {
                 localTrackView->swapPlugins(pluginIndex, pluginIndex + 1);
-                quint32 trackIndex = localTrackView->getInputIndex();
-                mainController->swapPlugins(trackIndex, pluginIndex, pluginIndex + 1);
             }
             break;
         }

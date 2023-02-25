@@ -122,7 +122,7 @@ QColor NinjamTrackGroupView::getTintColor() const
     return trackViews.first()->getTintColor();
 }
 
-void NinjamTrackGroupView::addVideoInterval(const QByteArray &encodedVideoData)
+void NinjamTrackGroupView::addVideoInterval(const QSharedPointer<QByteArray>& encodedVideoData)
 {
 
     // hide the video (2nd) channel
@@ -399,7 +399,7 @@ void NinjamTrackGroupView::resetMainLayoutStretch()
 
 NinjamTrackView *NinjamTrackGroupView::createTrackView(long trackID)
 {
-    auto trackNode = mainController->getTrackNode(trackID).dynamicCast<NinjamTrackNode>();
+    auto trackNode = mainController->getNinjamController()->getTrackNode(trackID).dynamicCast<NinjamTrackNode>();
     if (trackNode) {
         return new NinjamTrackView(mainController, trackNode, mainController->getUsersDataCache());
     }

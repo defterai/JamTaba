@@ -86,9 +86,9 @@ namespace client
         void serverBpiChanged(quint16 currentBpi, quint16 lastBpi);
         void serverBpmChanged(quint16 currentBpm);
         void serverInitialBpmBpiAvailable(quint16 bpm, quint16 bpi);
-        void audioIntervalCompleted(const ninjam::client::User &user, quint8 channelIndex, const QByteArray &encodedAudioData);
-        void videoIntervalCompleted(const ninjam::client::User &user, const QByteArray &encodedVideoData);
-        void audioIntervalDownloading(const ninjam::client::User &user, quint8 channelIndex, const QByteArray &encodedAudioData, bool isFirstPart, bool isLastPart);
+        void audioIntervalCompleted(const ninjam::client::User &user, quint8 channelIndex, const QSharedPointer<QByteArray>& encodedAudioData);
+        void videoIntervalCompleted(const ninjam::client::User &user, const QSharedPointer<QByteArray>& encodedVideoData);
+        void audioIntervalDownloading(const ninjam::client::User &user, quint8 channelIndex, const QSharedPointer<QByteArray>& encodedAudioData, bool isFirstPart, bool isLastPart);
         void disconnectedFromServer(const ninjam::client::ServerInfo &server);
         void connectedInServer(const ninjam::client::ServerInfo &server);
         void publicChatMessageReceived(const ninjam::client::User &sender, const QString &message);

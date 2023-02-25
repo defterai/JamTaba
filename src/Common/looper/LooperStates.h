@@ -10,25 +10,32 @@ namespace audio {
 
 class SamplesBuffer;
 
+
+
 class LooperState
 {
 
 public:
-    explicit LooperState(Looper *looper);
+    enum class State {
+        Stopped = 0,
+        Playing,
+        Waiting,
+        Recording,
+    };
+
+    LooperState(State state);
     virtual ~LooperState() {}
+    virtual void mixTo(Looper *looper, SamplesBuffer &samples, uint samplesToProcess) = 0;
+    virtual void addBuffer(Looper *looper, const SamplesBuffer &samples, uint samplesToProcess) = 0;
+    virtual void handleNewCycle(Looper *looper, uint samplesInCycle) = 0;
 
-    virtual void mixTo(SamplesBuffer &samples, uint samplesToProcess) = 0;
-    virtual void addBuffer(const SamplesBuffer &samples, uint samplesToProcess) = 0;
-
-    virtual void handleNewCycle(uint samplesInCycle) = 0;
-    virtual inline bool isWaiting() const { return false; }
-    virtual inline bool isStopped() const { return false; }
-    virtual inline bool isRecording() const { return false; }
-    virtual inline bool isPlaying() const { return false; }
+    inline bool isWaiting() const { return state == State::Waiting; }
+    inline bool isStopped() const { return state == State::Stopped; }
+    inline bool isRecording() const { return state == State::Recording; }
+    inline bool isPlaying() const { return state == State::Playing; }
 
 protected:
-    Looper *looper;
-
+    State state;
 };
 
 // -------------------------------------------------------
@@ -37,10 +44,9 @@ class StoppedState : public LooperState
 {
 public:
     StoppedState();
-    void handleNewCycle(uint samplesInCycle) override;
-    void mixTo(SamplesBuffer &samples, uint samplesToProcess) override;
-    void addBuffer(const SamplesBuffer &samples, uint samplesToProcess) override;
-    inline bool isStopped() const override { return true ;}
+    void handleNewCycle(Looper *looper, uint samplesInCycle) override;
+    void mixTo(Looper *looper, SamplesBuffer &samples, uint samplesToProcess) override;
+    void addBuffer(Looper *looper, const SamplesBuffer &samples, uint samplesToProcess) override;
 };
 
 // -------------------------------------------------------
@@ -48,11 +54,10 @@ public:
 class PlayingState : public LooperState
 {
 public:
-    explicit PlayingState(Looper *looper);
-    void handleNewCycle(uint samplesInCycle) override;
-    void mixTo(SamplesBuffer &samples, uint samplesToProcess) override;
-    void addBuffer(const SamplesBuffer &samples, uint samplesToProcess) override;
-    inline bool isPlaying() const override { return true ;}
+    PlayingState();
+    void handleNewCycle(Looper *looper, uint samplesInCycle) override;
+    void mixTo(Looper *looper, SamplesBuffer &samples, uint samplesToProcess) override;
+    void addBuffer(Looper *looper, const SamplesBuffer &samples, uint samplesToProcess) override;
 };
 
 // -------------------------------------------------------
@@ -60,11 +65,10 @@ public:
 class WaitingToRecordState : public LooperState
 {
 public:
-    explicit WaitingToRecordState(Looper *looper);
-    void handleNewCycle(uint samplesInCycle) override;
-    inline bool isWaiting() const override { return true ;}
-    void addBuffer(const SamplesBuffer &samples, uint samplesToProcess) override;
-    void mixTo(SamplesBuffer &samples, uint samplesToProcess) override;
+    WaitingToRecordState();
+    void handleNewCycle(Looper *looper, uint samplesInCycle) override;
+    void addBuffer(Looper *looper, const SamplesBuffer &samples, uint samplesToProcess) override;
+    void mixTo(Looper *looper, SamplesBuffer &samples, uint samplesToProcess) override;
 
 private:
     SamplesBuffer lastInputBuffer;
@@ -75,12 +79,10 @@ private:
 class RecordingState : public LooperState
 {
 public:
-    RecordingState(Looper *looper, quint8 recordingLayer);
-    void handleNewCycle(uint samplesInCycle) override;
-    void addBuffer(const SamplesBuffer &samples, uint samplesToProcess) override;
-    void mixTo(SamplesBuffer &samples, uint samplesToProcess) override;
-    inline bool isWaiting() const override { return false ;}
-    inline bool isRecording() const override { return true ;}
+    explicit RecordingState(quint8 recordingLayer);
+    void handleNewCycle(Looper *looper, uint samplesInCycle) override;
+    void addBuffer(Looper *looper, const SamplesBuffer &samples, uint samplesToProcess) override;
+    void mixTo(Looper *looper, SamplesBuffer &samples, uint samplesToProcess) override;
 
 private:
     const quint8 firstRecordingLayer; // used to watch when looper back to first rect layer and auto stop recording

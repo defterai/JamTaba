@@ -420,7 +420,7 @@ void NinjamRoomWindow::updatePeaks()
 
     auto metronomeTrack = mainController->getNinjamController()->getMetronomeTrack();
     if (metronomeTrack) {
-        auto metronomePeak = mainController->getTrackPeak(metronomeTrack->getID());
+        auto metronomePeak = metronomeTrack->getLastPeak();
         metronomePanel->setMetronomePeaks(metronomePeak.getLeftPeak(),
                                        metronomePeak.getRightPeak(),
                                        metronomePeak.getLeftRMS(),
@@ -439,20 +439,13 @@ void NinjamRoomWindow::hideIntervalDownloadingProgressBar(long trackID)
 
 void NinjamRoomWindow::updateIntervalDownloadingProgressBar(long trackID)
 {
-    auto node = mainController->getTrackNode(trackID).dynamicCast<NinjamTrackNode>();
     NinjamTrackView *trackView = getTrackViewByID(trackID);
-    if (node && trackView) {
-        bool waitingToPlayTheFirstInterval = !node->isPlaying();
+    if (trackView) {
+        auto node = trackView->getTrack<NinjamTrackNode>();
+        bool waitingToPlayTheFirstInterval = node && !node->isPlaying();
         if (waitingToPlayTheFirstInterval)
             trackView->incrementDownloadedChunks();
     }
-}
-
-void NinjamRoomWindow::setChannelXmitStatus(long channelID, bool transmiting)
-{
-    NinjamTrackView *trackView = getTrackViewByID(channelID);
-    if (trackView)
-        trackView->setActivatedStatus(!transmiting);
 }
 
 void NinjamRoomWindow::removeChannel(const User &user, const UserChannel &channel, long channelID)
@@ -494,7 +487,7 @@ void NinjamRoomWindow::changeChannel(const User &, const UserChannel &channel, l
     auto trackView = getTrackViewByID(channelID);
     if (trackView) {
         trackView->setChannelName(channel.getName());
-        trackView->setChannelMode(channel.isVoiceChatChannel() ? NinjamTrackNode::VoiceChat : NinjamTrackNode::Intervalic);
+        trackView->setChannelMode(channel.isVoiceChatChannel() ? NinjamTrackNode::ChannelMode::VoiceChat : NinjamTrackNode::ChannelMode::Intervalic);
     }
 }
 
@@ -587,7 +580,7 @@ void NinjamRoomWindow::addChannel(const User &user, const UserChannel &channel, 
 
     if (!trackGroups.contains(user.getFullName())) { // first channel from this user?
         auto channelName = channel.getName();
-        auto channelMode = channel.isVoiceChatChannel() ? NinjamTrackNode::VoiceChat : NinjamTrackNode::Intervalic;
+        auto channelMode = channel.isVoiceChatChannel() ? NinjamTrackNode::ChannelMode::VoiceChat : NinjamTrackNode::ChannelMode::Intervalic;
         auto userColor = usersColorsPool->get(user.getName()); // the user channel and your chat messages are painted with same color
         auto trackGroupView = new NinjamTrackGroupView(mainController, channelID, channelName,
                                                        channelMode, userColor, cacheEntry);
@@ -604,11 +597,11 @@ void NinjamRoomWindow::addChannel(const User &user, const UserChannel &channel, 
         if (trackGroup) {
             auto ninjamTrackView = trackGroup->addTrackView(channelID);
             ninjamTrackView->setChannelName(channel.getName());
-            ninjamTrackView->setChannelMode(channel.isVoiceChatChannel() ? NinjamTrackNode::VoiceChat : NinjamTrackNode::Intervalic);
+            ninjamTrackView->setChannelMode(channel.isVoiceChatChannel() ? NinjamTrackNode::ChannelMode::VoiceChat : NinjamTrackNode::ChannelMode::Intervalic);
             ninjamTrackView->setInitialValues(cacheEntry);
             ninjamTrackView->setEstimatedChunksPerInterval(calculateEstimatedChunksPerInterval());
             ninjamTrackView->setActivatedStatus(true); /** disabled/grayed until receive the first bytes. When the first bytes
-            are downloaded the 'on_channelXmitChanged' slot is executed and this track is enabled.*/
+            are downloaded the 'xmitStateChanged' slot is executed and this track is enabled.*/
         }
     }
 
@@ -723,8 +716,7 @@ void NinjamRoomWindow::handleAccentBeatsComboChange(int index)
     } else {
         ninjamPanel->setAccentBeatsReadOnly(true);
         ninjamPanel->setAccentBeatsVisible(false);
-        int currentBpi = mainController->getNinjamController()->getCurrentBpi();
-        mainController->getNinjamController()->setMetronomeBeatsPerAccent(accentBeatsCb, currentBpi);
+        mainController->getNinjamController()->setMetronomeBeatsPerAccent(accentBeatsCb);
     }
 }
 
@@ -775,8 +767,6 @@ void NinjamRoomWindow::setupSignals(controller::NinjamController* ninjamControll
 
     connect(ninjamController, &NinjamController::channelAudioFullyDownloaded, this, &NinjamRoomWindow::hideIntervalDownloadingProgressBar);
 
-    connect(ninjamController, &NinjamController::channelXmitChanged, this, &NinjamRoomWindow::setChannelXmitStatus);
-
     connect(ninjamController, &NinjamController::currentBpiChanged, this, &NinjamRoomWindow::handleBpiChanges);
     connect(ninjamController, &NinjamController::currentBpmChanged, this, &NinjamRoomWindow::handleBpmChanges);
 
@@ -805,7 +795,7 @@ void NinjamRoomWindow::showChordProgressionDialog(const ChordProgression &curren
     }
 }
 
-void NinjamRoomWindow::setVideoInterval(const User &user, const QByteArray &encodedVideoData)
+void NinjamRoomWindow::setVideoInterval(const User &user, const QSharedPointer<QByteArray>& encodedVideoData)
 {
     auto group = trackGroups[user.getFullName()];
     if (group) {

@@ -185,9 +185,8 @@ AudioPeak SamplesBuffer::computePeak()
 {
     float abs; // max peak absolute value
     float maxPeaks[2] = {0};// left and right peaks
-	unsigned maxChan = isMono() ? 1 : channels; // don't loop and mul/add twice if only one channel
 
-    for (unsigned int c = 0; c < maxChan; ++c) {
+    for (unsigned int c = 0; c < channels; ++c) {
         float maxPeak = 0;
 		const std::vector<float>& chanSamples = samples[c]; // optimize costly stl vector access out of the inner loop
         for (unsigned int i = 0; i < frameLenght; ++i) {

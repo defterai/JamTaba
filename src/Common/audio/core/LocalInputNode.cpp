@@ -18,7 +18,11 @@ static const int MAX_SUB_CHANNELS = 2;
 LocalAudioInputProps::LocalAudioInputProps() :
     stereoInverted(false)
 {
-    qRegisterMetaType<LocalAudioInputProps>();
+    static bool registered = false;
+    if (!registered) {
+        qRegisterMetaType<LocalAudioInputProps>();
+        registered = true;
+    }
 }
 
 LocalAudioInputProps::LocalAudioInputProps(int firstChannel, int channelsCount)
@@ -56,7 +60,11 @@ MidiInputProps::MidiInputProps() :
     transpose(0),
     learning(false)
 {
-    qRegisterMetaType<MidiInputProps>();
+    static bool registered = false;
+    if (!registered) {
+        qRegisterMetaType<MidiInputProps>();
+        registered = true;
+    }
 }
 
 bool MidiInputProps::operator==(const MidiInputProps& rhs) const
@@ -116,14 +124,22 @@ bool MidiInputProps::accept(const midi::MidiMessage &message) const
 
 // ---------------------------------------------------------------------
 
-LocalInputNode::LocalInputNode(const QSharedPointer<LocalInputGroup>& inputGroup, const QSharedPointer<Looper>& looper) :
-    lastMidiActivity(0),
-    inputGroup(inputGroup),
+LocalInputNode::LocalInputNode(int inputGroupIndex, const QSharedPointer<Looper>& looper, int sampleRate) :
+    AudioNode(sampleRate),
+    looper(looper),
+    inputGroupIndex(inputGroupIndex),
     receivingRoutedMidiInput(false),
     routingMidiInput(false),
-    inputMode(LocalInputMode::DISABLED),
-    looper(looper)
+    inputMode(LocalInputMode::DISABLED)
 {
+    looper->setParent(this);
+
+    static bool registered = false;
+    if (!registered) {
+        qRegisterMetaType<LocalInputMode>();
+        registered = true;
+    }
+
     QObject::connect(this, &LocalInputNode::postSetInputMode, this, &LocalInputNode::setInputMode);
     QObject::connect(this, &LocalInputNode::postSetStereoInversion, this, &LocalInputNode::setStereoInversion);
     QObject::connect(this, &LocalInputNode::postSetAudioInputProps, this, &LocalInputNode::setAudioInputProps);
@@ -135,14 +151,10 @@ LocalInputNode::~LocalInputNode()
 
 }
 
-void LocalInputNode::stopLooper()
+void LocalInputNode::attachChannelGroup(const QSharedPointer<audio::LocalInputGroup>& group)
 {
-    looper->stop();
-}
-
-void LocalInputNode::startNewLoopCycle(uint intervalLenght)
-{
-    looper->startNewCycle(intervalLenght);
+    Q_ASSERT(group && group->getIndex() == inputGroupIndex);
+    inputGroup = group;
 }
 
 audio::LocalInputMode LocalInputNode::getInputMode() const
@@ -224,10 +236,8 @@ void LocalInputNode::setMidiInputProps(MidiInputProps props, void* sender)
 }
 
 void LocalInputNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out,
-                                           int sampleRate, std::vector<midi::MidiMessage> &midiBuffer)
+                                      std::vector<midi::MidiMessage> &midiBuffer)
 {
-    Q_UNUSED(sampleRate);
-
     /**
     *   The input buffer (in) is a multichannel buffer. So, this buffer contains
     * all channels grabbed from soundcard inputs. For example, if the user selected a range of 4
@@ -263,20 +273,29 @@ void LocalInputNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &ou
     }
 
     if (isRoutingMidiInput()) {
-        lastPeak.update(AudioPeak()); // ensure the audio meters will be ZERO
-
+        resetLastPeak(); // ensure the audio meters will be ZERO
         return; // when routing midi this track will not render midi data, this data will be rendered by first subchannel. But the midi data is processed above to update MIDI activity meter
     }
 
-    AudioNode::processReplacing(in, out, sampleRate, filteredMidiBuffer); // only the filtered midi messages are sended to rendering code
+    AudioNode::processReplacing(in, out, filteredMidiBuffer); // only the filtered midi messages are sended to rendering code
+}
+
+bool LocalInputNode::setSampleRate(int newSampleRate)
+{
+    if (AudioNode::setSampleRate(newSampleRate)) {
+        setProcessorsSampleRate(newSampleRate);
+        return true;
+    }
+    return false;
 }
 
 void LocalInputNode::updateMidiActivity(const midi::MidiMessage &message)
 {
     if (message.isNoteOn() || message.isControl()) {
         quint8 activityValue = message.getData2();
-        if (activityValue > lastMidiActivity)
-            lastMidiActivity = activityValue;
+        if (activityValue > 0) {
+            emit midiActivityDetected(activityValue);
+        }
     }
 }
 
@@ -351,25 +370,32 @@ qint8 LocalInputNode::getTranspose() const
     return 0;
 }
 
-void LocalInputNode::pluginsProcess(audio::SamplesBuffer &out, std::vector<midi::MidiMessage> &midiBuffer)
+void LocalInputNode::pluginsProcess(audio::SamplesBuffer &in, audio::SamplesBuffer &out, std::vector<midi::MidiMessage> &midiBuffer)
 {
-    static SamplesBuffer tempInputBuffer(2);
-
+    bool processed = false;
+    audio::SamplesBuffer* inputBuffer = &in;
+    audio::SamplesBuffer* outputBuffer = &out;
     for (const auto& processor : getProcessors()) {
         if (processor && !processor->isBypassed()) {
-            tempInputBuffer.setFrameLenght(internalOutputBuffer.getFrameLenght());
-            tempInputBuffer.set(internalOutputBuffer); // the output from previous plugin is used as input to the next plugin in the chain
-
-            processor->process(tempInputBuffer, internalOutputBuffer, midiBuffer);
-
-            // some plugins are blocking the midi messages. If a VSTi can't generate messages the previous messages list will be sended for the next plugin in the chain. The messages list is cleared only when the plugin can generate midi messages.
-            if (processor->isVirtualInstrument() && processor->canGenerateMidiMessages())
+            if (processed) {
+                // swap buffers to use output as input for next plugin
+                std::swap(inputBuffer, outputBuffer);
+            }
+            processor->process(*inputBuffer, *outputBuffer, midiBuffer);
+            // some plugins are blocking the midi messages.
+            // If a VSTi can't generate messages the previous messages list will be sended for the next plugin in the chain.
+            // The messages list is cleared only when the plugin can generate midi messages.
+            if (processor->isVirtualInstrument() && processor->canGenerateMidiMessages()) {
                 midiBuffer.clear(); // only the fresh messages will be passed by the next plugin in the chain
-
-
+            }
             auto pulledMessages = processor->pullGeneratedMidiMessages();
             midiBuffer.insert(midiBuffer.end(), pulledMessages.begin(), pulledMessages.end());
+            processed = true;
         }
+    }
+    // fill output buffer from input if needed
+    if (!processed || outputBuffer == &in) {
+        out.set(in);
     }
 }
 
@@ -393,7 +419,7 @@ bool LocalInputNode::canProcessMidiMessage(const midi::MidiMessage &message) con
 
 int LocalInputNode::getChannelGroupIndex() const
 {
-    return inputGroup->getIndex();
+    return inputGroupIndex;
 }
 
 void LocalInputNode::reset()
@@ -413,6 +439,7 @@ void LocalInputNode::addProcessor(const QSharedPointer<AudioNodeProcessor> &newP
 {
     assert(newProcessor);
     assert(slotIndex < processors.size());
+    newProcessor->setSampleRate(getSampleRate());
     QMutexLocker locker(&mutex);
     processors[slotIndex] = newProcessor;
 }

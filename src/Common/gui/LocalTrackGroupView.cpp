@@ -30,7 +30,7 @@ LocalTrackGroupView::LocalTrackGroupView(int channelIndex, MainWindow *mainWindo
     topPanelLayout->addWidget(instrumentsButton, 1, Qt::AlignCenter);
 
     connect(instrumentsButton, &InstrumentsButton::iconChanged, this, &LocalTrackGroupView::instrumentIconChanged);
-
+    connect(instrumentsButton, &InstrumentsButton::iconChanged, this, &LocalTrackGroupView::storeChannelInstrumentIndex);
 
     toolButton = createToolButton();
     voiceChatButton = createVoiceChatButton();
@@ -198,6 +198,13 @@ void LocalTrackGroupView::addChannel()
 void LocalTrackGroupView::setInstrumentIcon(int instrumentIndex)
 {
     instrumentsButton->setInstrumentIcon(instrumentIndex);
+    storeChannelInstrumentIndex(instrumentIndex);
+}
+
+void LocalTrackGroupView::storeChannelInstrumentIndex(int instrumentIndex)
+{
+    auto mainController = mainWindow->getMainController();
+    mainController->storeChannelInstrumentIndex(index, instrumentIndex);
 }
 
 int LocalTrackGroupView::getInstrumentIcon() const
@@ -352,7 +359,7 @@ LocalTrackView *LocalTrackGroupView::addTrackView(long trackID)
 LocalTrackView *LocalTrackGroupView::createTrackView(long trackID)
 {
     auto mainController = mainWindow->getMainController();
-    return new LocalTrackView(mainController->createLocalInputNode(trackID));
+    return new LocalTrackView(mainController->createInputNode(trackID));
 }
 
 void LocalTrackGroupView::setToWide()
@@ -424,7 +431,7 @@ void LocalTrackGroupView::savePreset()
                                          QDir::home().dirName(), &ok);
     if (ok && !text.isEmpty()) {
         text.append(".json");
-        mainWindow->getMainController()->savePreset(mainWindow->getInputsSettings(), text);
+        mainWindow->getMainController()->savePreset(mainWindow->getMainController()->getLastInputsSettings(), text);
     }
 }
 

@@ -17,7 +17,7 @@ public:
     void stopAndWaitForHostSync();
     void disableHostSync();
 
-    void process(const audio::SamplesBuffer &in, audio::SamplesBuffer &out, int sampleRate);
+    void process(const QSharedPointer<audio::SamplesBuffer>& in, const QSharedPointer<audio::SamplesBuffer>& out);
 
 private:
 

@@ -2,6 +2,7 @@
 #define MAIN_WINDOW_H
 
 #include "ui_MainWindow.h"
+#include "audio/core/AudioPeak.h"
 
 #include <QTranslator>
 #include <QMainWindow>
@@ -30,6 +31,10 @@ class ScreensaverBlocker;
 class PerformanceMonitor;
 class TextEditorModifier;
 class PrivateServerWindow;
+
+namespace audio {
+class LocalInputNode;
+}
 
 namespace login {
 class RoomInfo;
@@ -78,8 +83,6 @@ public:
 
     void detachMainController();
 
-    virtual LocalInputTrackSettings getInputsSettings() const;
-
     int getChannelGroupsCount() const;
 
     QString getChannelGroupName(int index) const;
@@ -96,7 +99,6 @@ public:
     virtual void loadPreset(const Preset &preset);
     void resetLocalChannels();
 
-    bool isTransmiting(int channelID) const;
     void setTransmitingStatus(int channelID, bool xmitStatus);
 
     void setVoiceChatStatus(int channelID, bool voiceChatStatus);
@@ -129,7 +131,7 @@ public:
 
 public slots:
     void enterInRoom(const login::RoomInfo &roomInfo);
-    void openLooperWindow(int trackID);
+    void openLooperWindow(QSharedPointer<audio::LocalInputNode> inputNode);
     void tryEnterInRoom(const login::RoomInfo &roomInfo, const QString &password = "");
 
     void showFeedbackAboutBlockedUserInChat(const QString &userFullName);
@@ -253,7 +255,10 @@ protected slots:
     void updateChannelsNames();
 
     // room streamer
+    void handlePublicRoomStreamState(bool streaming);
     void handlePublicRoomStreamError(const QString &msg);
+    void handlePublicRoomBufferingChanged(bool buffering, int percent);
+    void handlePublicRoomAudioPeakChanged(const audio::AudioPeak& audioPeak);
 
     // master fader
     void setMasterGain(int faderPosition);
@@ -294,6 +299,8 @@ private slots:
     void setLanguage(QAction * languageMenuAction);
 
     void updateUserName();
+
+    void updateMasterPeak(const audio::AudioPeak& masterPeak);
 
     void changeTheme(QAction *action);
     void translateThemeMenu();
@@ -357,6 +364,12 @@ private:
     QScopedPointer<MainChat> mainChat;
 
     QScopedPointer<PrivateServerWindow, QScopedPointerDeleteLater> privateServerWindow;
+
+    audio::AudioPeak masterPeak;
+
+    audio::AudioPeak streamingAudioPeak;
+    int streamingBufferingPercentage;
+    bool streamingBuffering;
 
     void showBusyDialog(const QString &message);
     void showBusyDialog();

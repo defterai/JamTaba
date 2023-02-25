@@ -6,8 +6,7 @@
 #include <QThread>
 #include <QMap>
 #include <QSharedPointer>
-
-#include "audio/Encoder.h"
+#include <QScopedPointer>
 
 class NinjamTrackNode;
 
@@ -23,9 +22,15 @@ namespace audio {
     class SamplesBuffer;
 }
 
+namespace persistence {
+    class MetronomeSoundSettings;
+}
+
 namespace controller {
 
+struct AudioChannelData;
 class MainController;
+class AudioEncoderController;
 
 using ninjam::client::ServerInfo;
 using ninjam::client::User;
@@ -41,17 +46,18 @@ class NinjamController : public QObject
 public:
     explicit NinjamController(MainController *mainController);
     virtual ~NinjamController();
-    virtual void process(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate);
+    virtual void process(const QSharedPointer<audio::SamplesBuffer>& in, const QSharedPointer<audio::SamplesBuffer>& out);
     void start(const ServerInfo &server);
     void stop(bool emitDisconnectedSignal);
     bool isRunning() const;
 
+    void setEncodingQuality(float newEncodingQuality);
+
     const QSharedPointer<MetronomeTrackNode>& getMetronomeTrack() const;
     const QSharedPointer<MidiSyncTrackNode>& getMidiSyncTrack() const;
 
-    void setMetronomeBeatsPerAccent(int beatsPerAccent, int currentBpi);
+    void setMetronomeBeatsPerAccent(int beatsPerAccent);
     void setMetronomeAccentBeats(QList<int> accentBeats);
-    QList<int> getMetronomeAccentBeats();
 
     int getCurrentBpi() const;
     int getCurrentBpm() const;
@@ -59,19 +65,13 @@ public:
     void voteBpi(int newBpi);
     void voteBpm(int newBpm);
 
+    void setBpi(int newBpi);
     void setBpm(int newBpm);
     void setBpmBpi(int initialBpm, int initalBpi);
 
     void setSyncEnabled(bool enabled);
 
     void sendChatMessage(const QString &msg);
-
-    void recreateEncoders();
-
-    QByteArray encode(const SamplesBuffer &buffer, uint channelIndex, bool lastPart);
-
-    void scheduleEncoderChangeForChannel(int channelIndex, bool voiceChatActivated);
-    void removeEncoder(int groupChannelIndex);
 
     void scheduleXmitChange(int channelID, bool transmiting);     // schedule the change for the next interval
 
@@ -81,13 +81,15 @@ public:
 
     bool isPreparedForTransmit() const;
 
-    void recreateMetronome(int newSampleRate);
+    void updateMetronomeSound(const persistence::MetronomeSoundSettings& settings);
 
     bool userIsBot(const QString userName) const;
 
     User getUserByName(const QString &userName) const;
 
     uint getSamplesPerInterval() const;
+
+    QSharedPointer<NinjamTrackNode> getTrackNode(int channelIndex) const;
 
     QList<QSharedPointer<NinjamTrackNode>> getTrackNodes() const;
 
@@ -101,7 +103,6 @@ signals:
     void channelAdded(const ninjam::client::User &user, const ninjam::client::UserChannel &channel, long channelID);
     void channelRemoved(const ninjam::client::User &user, const ninjam::client::UserChannel &channel, long channelID);
     void channelChanged(const ninjam::client::User &user, const ninjam::client::UserChannel &channel, long channelID); // emmited when channel name or flags (intervalic or voice chat channel) changes
-    void channelXmitChanged(long channelID, bool transmiting);
     void channelAudioChunkDownloaded(long channelID);
     void channelAudioFullyDownloaded(long channelID);
     void userLeave(const QString &userFullName);
@@ -111,8 +112,7 @@ signals:
     void privateChatMessageReceived(const ninjam::client::User &user, const QString &message);
     void topicMessageReceived(const QString &message);
 
-    void encodedAudioAvailableToSend(const QByteArray &encodedAudio, quint8 channelIndex,
-                                     bool isFirstPart, bool isLastPart);
+    void encodedAudioAvailableToSend(const controller::AudioChannelData& channelData, const QByteArray& encodedData);
 
     void preparingTransmission();     // waiting for start transmission
     void preparedToTransmit();     // this signal is emmited one time, when Jamtaba is ready to transmit (after wait some complete itervals)
@@ -123,6 +123,7 @@ protected:
     long intervalPosition;
     long samplesInInterval;
 
+    mutable QMutex mutex;
     QMap<QString, QSharedPointer<NinjamTrackNode>> trackNodes;     // the other users channels
 
     MainController *mainController;
@@ -136,14 +137,13 @@ private:
     void addTrack(const User &user, const UserChannel &channel);
     void removeTrack(const User &user, const UserChannel &channel);
 
+    QScopedPointer<controller::AudioEncoderController, QScopedPointerDeleteLater> encoderController;
+
     bool running;
     int lastBeat;
 
     int currentBpi;
     int currentBpm;
-
-    QMutex mutex;
-    QMutex encodersMutex;
 
     long computeTotalSamplesInInterval();
     long getSamplesPerBeat();
@@ -151,13 +151,7 @@ private:
     void processScheduledChanges();
     bool hasScheduledChanges() const;
 
-    QSharedPointer<MetronomeTrackNode> createMetronomeTrackNode(int sampleRate);
-
-    QMap<int, QSharedPointer<AudioEncoder>> encoders;
-    AudioEncoder *getEncoder(quint8 channelIndex);
-
     void handleNewInterval();
-    void recreateEncoderForChannel(int channelIndex, bool voiceChannelActivated);
 
     void setXmitStatus(int channelID, bool transmiting);
 
@@ -166,13 +160,8 @@ private:
     class SchedulableEvent;     // the interface for all events
     class BpiChangeEvent;
     class BpmChangeEvent;
-    class InputChannelChangedEvent;    // user change the channel input selection from mono to stereo or vice-versa, or user added a new channel, both cases requires a new encoder in next interval
     QList<QSharedPointer<SchedulableEvent>> scheduledEvents;
     QMutex scheduledEventsMutex;
-
-    class EncodingThread;
-
-    QScopedPointer<EncodingThread, QScopedPointerDeleteLater> encodingThread;
 
     bool preparedForTransmit;
     int waitingIntervals;
@@ -185,8 +174,9 @@ private slots:
     void scheduleBpmChangeEvent(quint16 newBpm);
     void scheduleBpiChangeEvent(quint16 newBpi, quint16 oldBpi);
     void handleIntervalCompleted(const ninjam::client::User &user, quint8 channelIndex,
-                                 const QByteArray &encodedAudioData);
-    void handleIntervalDownloading(const ninjam::client::User &user, quint8 channelIndex, const QByteArray &encodedAudio, bool isFirstPart, bool isLastPart);
+                                 const QSharedPointer<QByteArray>& encodedAudioData);
+    void handleIntervalDownloading(const ninjam::client::User &user, quint8 channelIndex,
+                                   const QSharedPointer<QByteArray>& encodedAudio, bool isFirstPart, bool isLastPart);
     void addNinjamRemoteChannel(const ninjam::client::User &user, const ninjam::client::UserChannel &channel);
     void removeNinjamRemoteChannel(const ninjam::client::User &user, const ninjam::client::UserChannel &channel);
     void updateNinjamRemoteChannel(const ninjam::client::User &user, const ninjam::client::UserChannel &channel);
@@ -194,6 +184,8 @@ private slots:
     void handleNinjamUserEntering(const ninjam::client::User &user);
     void handleReceivedPublicChatMessage(const ninjam::client::User &user, const QString &message);
     void handleReceivedPrivateChatMessage(const ninjam::client::User &user, const QString &message);
+    void handleEncodedAudioAvailable(const controller::AudioChannelData& channelData, const QByteArray& encodedData);
+
 };     // end of class
 
 inline QList<QSharedPointer<NinjamTrackNode>> NinjamController::getTrackNodes() const

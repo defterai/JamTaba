@@ -24,6 +24,7 @@ public:
 
     int getChannels() const override;
     int getSampleRate() const override;
+    float getQuality() const override;
 
 private:
 
@@ -37,6 +38,8 @@ private:
     int totalEncoded;
 
     bool initialized;
+
+    float quality;
 
     QByteArray outBuffer;
 
@@ -59,6 +62,11 @@ inline int Encoder::getChannels() const
 inline int Encoder::getSampleRate() const
 {
     return info.rate;
+}
+
+inline float Encoder::getQuality() const
+{
+    return quality;
 }
 
 } // namespace

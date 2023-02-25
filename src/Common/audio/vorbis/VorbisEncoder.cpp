@@ -20,6 +20,7 @@ Encoder::Encoder(uint channels, uint sampleRate, float quality):
 
 void Encoder::init(uint channels, uint sampleRate, float quality)
 {
+    this->quality = quality;
     vorbis_info_init(&info);
 
     if (vorbis_encode_init_vbr(&info, static_cast<long>(channels), static_cast<long>(sampleRate), quality) != 0) {

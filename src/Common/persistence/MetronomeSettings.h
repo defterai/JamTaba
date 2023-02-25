@@ -5,33 +5,16 @@
 
 namespace persistence {
 
-class MetronomeSettings final : public SettingsObject
+class MetronomeSoundSettings : public SettingsObject
 {
 public:
-    MetronomeSettings();
+    MetronomeSoundSettings();
+    bool operator==(const MetronomeSoundSettings& rhs) const;
+    bool operator!=(const MetronomeSoundSettings& rhs) const;
+    bool isSoundChanged(const MetronomeSoundSettings& rhs) const;
     void write(QJsonObject &out) const override;
     void read(const QJsonObject &in) override;
-    inline float getPan() const
-    {
-        return pan;
-    }
-    void setPan(float value);
-    inline float getGain() const
-    {
-        return gain;
-    }
-    inline void setGain(float value)
-    {
-        gain = value;
-    }
-    inline bool isMuted() const
-    {
-        return muted;
-    }
-    inline void setMuted(bool value)
-    {
-        muted = value;
-    }
+
     inline bool isUsingCustomSounds() const
     {
         return usingCustomSounds;
@@ -57,16 +40,50 @@ public:
     }
     void setBuiltInMetronome(const QString &metronomeAlias);
 private:
-    float pan;
-    float gain;
-    bool muted;
-    bool usingCustomSounds;
     QString customPrimaryBeatAudioFile;
     QString customOffBeatAudioFile;
     QString customAccentBeatAudioFile;
     QString builtInMetronomeAlias;
+    bool usingCustomSounds;
+};
+
+class MetronomeSettings final : public MetronomeSoundSettings
+{
+public:
+    MetronomeSettings();
+    bool operator==(const MetronomeSettings& rhs) const;
+    bool operator!=(const MetronomeSettings& rhs) const;
+    void write(QJsonObject &out) const override;
+    void read(const QJsonObject &in) override;
+    inline float getPan() const
+    {
+        return pan;
+    }
+    void setPan(float value);
+    inline float getGain() const
+    {
+        return gain;
+    }
+    inline void setGain(float value)
+    {
+        gain = value;
+    }
+    inline bool isMuted() const
+    {
+        return muted;
+    }
+    inline void setMuted(bool value)
+    {
+        muted = value;
+    }
+private:
+    float pan;
+    float gain;
+    bool muted;
 };
 
 }
+
+Q_DECLARE_METATYPE(persistence::MetronomeSoundSettings)
 
 #endif // METRONOMESETTINGS_H

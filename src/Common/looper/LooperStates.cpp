@@ -14,46 +14,49 @@ using audio::Looper;
 using audio::SamplesBuffer;
 using persistence::LooperMode;
 
-LooperState::LooperState(Looper *looper)
-    : looper(looper)
+LooperState::LooperState(State state) :
+    state(state)
 {
 
 }
 
 // ------------------------------------------------
 
-StoppedState::StoppedState()
-    : LooperState(nullptr)
+StoppedState::StoppedState() :
+    LooperState(State::Stopped)
 {
 
 }
 
-void StoppedState::handleNewCycle(uint samplesInCycle)
+void StoppedState::handleNewCycle(Looper *looper, uint samplesInCycle)
 {
+    Q_UNUSED(looper)
     Q_UNUSED(samplesInCycle)
 }
 
-void StoppedState::mixTo(SamplesBuffer &samples, uint samplesToProcess)
+void StoppedState::mixTo(Looper *looper, SamplesBuffer &samples, uint samplesToProcess)
 {
+    Q_UNUSED(looper)
     Q_UNUSED(samples)
     Q_UNUSED(samplesToProcess)
 }
 
-void StoppedState::addBuffer(const SamplesBuffer &samples, uint samplesToProcess)
+void StoppedState::addBuffer(Looper *looper, const SamplesBuffer &samples, uint samplesToProcess)
 {
-    Q_UNUSED (samples)
+    Q_UNUSED(looper)
+    Q_UNUSED(samples)
     Q_UNUSED(samplesToProcess)
 }
 
 // -------------------------------------------------------------------
 
-PlayingState::PlayingState(Looper *looper)
-    : LooperState(looper)
+PlayingState::PlayingState() :
+    LooperState(State::Playing)
 {
 
 }
 
-void PlayingState::handleNewCycle(uint samplesInCycle)
+void PlayingState::handleNewCycle(Looper *looper, uint samplesInCycle)
 {
     Q_UNUSED(samplesInCycle)
     if (looper->mode == LooperMode::Sequence) {
@@ -63,13 +66,14 @@ void PlayingState::handleNewCycle(uint samplesInCycle)
     // ALL_LAYERS and SELECTED_LAYER_ONLY play states are not touching in currentLayerIndex
 }
 
-void PlayingState::addBuffer(const SamplesBuffer &samples, uint samplesToProcess)
+void PlayingState::addBuffer(Looper *looper, const SamplesBuffer &samples, uint samplesToProcess)
 {
+    Q_UNUSED(looper)
     Q_UNUSED(samples);
     Q_UNUSED(samplesToProcess);
 }
 
-void PlayingState::mixTo(SamplesBuffer &samples, uint samplesToProcess)
+void PlayingState::mixTo(Looper *looper, SamplesBuffer &samples, uint samplesToProcess)
 {
     switch (looper->mode) {
     case LooperMode::Sequence:
@@ -92,14 +96,14 @@ void PlayingState::mixTo(SamplesBuffer &samples, uint samplesToProcess)
 
 // -------------------------------------------------------
 
-RecordingState::RecordingState(Looper *looper, quint8 recordingLayer)
-    : LooperState(looper),
-      firstRecordingLayer(recordingLayer)
+RecordingState::RecordingState(quint8 recordingLayer) :
+    LooperState(State::Recording),
+    firstRecordingLayer(recordingLayer)
 {
 
 }
 
-void RecordingState::handleNewCycle(uint samplesInCycle)
+void RecordingState::handleNewCycle(Looper *looper, uint samplesInCycle)
 {
     Q_UNUSED(samplesInCycle)
 
@@ -127,7 +131,7 @@ void RecordingState::handleNewCycle(uint samplesInCycle)
     }
 }
 
-void RecordingState::mixTo(SamplesBuffer &samples, uint samplesToProcess)
+void RecordingState::mixTo(Looper *looper, SamplesBuffer &samples, uint samplesToProcess)
 {
     samples.zero(); // zeroing samples before mix to avoid re-add buffered audio and double the incomming samples
 
@@ -146,7 +150,7 @@ void RecordingState::mixTo(SamplesBuffer &samples, uint samplesToProcess)
     }
 }
 
-void RecordingState::addBuffer(const SamplesBuffer &samples, uint samplesToProcess)
+void RecordingState::addBuffer(Looper *looper, const SamplesBuffer &samples, uint samplesToProcess)
 {
     if (looper->currentLayerIsLocked()) // avoid recording in locked layers
         return;
@@ -160,14 +164,14 @@ void RecordingState::addBuffer(const SamplesBuffer &samples, uint samplesToProce
 
 // -----------------------------------------------------------------------------
 
-WaitingToRecordState::WaitingToRecordState(Looper *looper)
-    : LooperState(looper),
-      lastInputBuffer(2)
+WaitingToRecordState::WaitingToRecordState() :
+    LooperState(State::Waiting),
+    lastInputBuffer(2)
 {
 
 }
 
-void WaitingToRecordState::mixTo(SamplesBuffer &samples, uint samplesToProcess)
+void WaitingToRecordState::mixTo(Looper *looper, SamplesBuffer &samples, uint samplesToProcess)
 {
     samples.zero();
 
@@ -186,14 +190,16 @@ void WaitingToRecordState::mixTo(SamplesBuffer &samples, uint samplesToProcess)
     }
 }
 
-void WaitingToRecordState::addBuffer(const SamplesBuffer &samples, uint samplesToProcess)
+void WaitingToRecordState::addBuffer(Looper *looper, const SamplesBuffer &samples, uint samplesToProcess)
 {
+    Q_UNUSED(looper)
+
     // not buffering samples when waiting to record. Incomming samples are stored in a secondary buffer
     lastInputBuffer.setFrameLenght(samplesToProcess);
     lastInputBuffer.set(samples);
 }
 
-void WaitingToRecordState::handleNewCycle(uint samplesInCycle)
+void WaitingToRecordState::handleNewCycle(Looper *looper, uint samplesInCycle)
 {
     Q_UNUSED(samplesInCycle)
 

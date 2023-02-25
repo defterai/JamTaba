@@ -1,6 +1,7 @@
 #include "JamTabaVSTPlugin.h"
 #include "MainControllerVST.h"
 #include "NinjamControllerPlugin.h"
+#include "audio/core/SamplesBuffer.h"
 #include "log/Logging.h"
 #include "Editor.h"
 
@@ -194,18 +195,18 @@ void JamTabaVSTPlugin::processReplacing(float **inputs, float **outputs, VstInt3
     }
 
     // ++++++++++ Audio processing +++++++++++++++
-    inputBuffer.setFrameLenght(sampleFrames);
-    for (int c = 0; c < inputBuffer.getChannels(); ++c)
-        memcpy(inputBuffer.getSamplesArray(c), inputs[c], sizeof(float) * sampleFrames);
+    inputBuffer->setFrameLenght(sampleFrames);
+    for (int c = 0; c < inputBuffer->getChannels(); ++c)
+        memcpy(inputBuffer->getSamplesArray(c), inputs[c], sizeof(float) * sampleFrames);
 
-    outputBuffer.setFrameLenght(sampleFrames);
-    outputBuffer.zero();
+    outputBuffer->setFrameLenght(sampleFrames);
+    outputBuffer->zero();
 
-    controller->process(inputBuffer, outputBuffer, this->sampleRate);
+    controller->process(inputBuffer, outputBuffer);
 
-    int channels = outputBuffer.getChannels();
+    int channels = outputBuffer->getChannels();
     for (int c = 0; c < channels; ++c)
-        memcpy(outputs[c], outputBuffer.getSamplesArray(c), sizeof(float) * sampleFrames);
+        memcpy(outputs[c], outputBuffer->getSamplesArray(c), sizeof(float) * sampleFrames);
 
     // ++++++++++++++++++++++++++++++
     hostWasPlayingInLastAudioCallBack = hostIsPlaying();
@@ -225,6 +226,7 @@ void JamTabaVSTPlugin::setSampleRate(float sampleRate)
 {
     JamTabaPlugin::setSampleRate(sampleRate);
     this->sampleRate = sampleRate;
+    controller->setSampleRate(sampleRate);
 }
 
 void JamTabaVSTPlugin::suspend()

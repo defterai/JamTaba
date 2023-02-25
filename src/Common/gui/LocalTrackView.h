@@ -50,7 +50,7 @@ public:
     void setTintColor(const QColor &color) override;
 
 signals:
-    void openLooperEditor(int trackIndex);
+    void openLooperEditor(QSharedPointer<audio::LocalInputNode> inputNode);
 
 protected:
     QPushButton *buttonStereoInversion;

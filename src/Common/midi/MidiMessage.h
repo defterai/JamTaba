@@ -2,6 +2,7 @@
 #define _MIDI_MESSAGE_
 
 #include <QtGlobal>
+#include <QObject>
 #include <vector>
 
 namespace midi {
@@ -72,5 +73,7 @@ inline bool MidiMessage::isControl() const
 }
 
 } // namespace
+
+Q_DECLARE_METATYPE(midi::MidiMessage)
 
 #endif

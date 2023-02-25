@@ -37,6 +37,7 @@ NinjamTrackView::NinjamTrackView(controller::MainController* mainController,
     BaseTrackView(trackNode),
     mainController(mainController),
     userDataCache(userDataCache),
+    lowCutState(trackNode->getLowCutState()),
     orientation(Qt::Vertical),
     downloadingFirstInterval(true),
     lastNetworkUsageUpdate(0)
@@ -72,6 +73,11 @@ NinjamTrackView::NinjamTrackView(controller::MainController* mainController,
     BaseTrackView::setActivatedStatus(true); // disabled/grayed until receive the first bytes.
 
     voiceChatIcon = IconFactory::createVoiceChatIcon();
+
+    buttonLowCut->setState(static_cast<quint8>(lowCutState));
+
+    connect(trackNode.data(), &NinjamTrackNode::xmitStateChanged, this, &NinjamTrackView::xmitStateChanged);
+    connect(trackNode.data(), &NinjamTrackNode::lowCutStateChanged, this, &NinjamTrackView::lowCutStateChanged);
 }
 
 void NinjamTrackView::setPeaks(float peakLeft, float peakRight, float rmsLeft, float rmsRight)
@@ -181,18 +187,16 @@ void NinjamTrackView::updateLowCutButtonToolTip()
 
 QString NinjamTrackView::getLowCutStateText() const
 {
-    auto trackNode = getTrackNode();
-
-    if (trackNode) {
-        switch(trackNode->getLowCutState())
-        {
-        case NinjamTrackNode::Off: return tr("Off");
-        case NinjamTrackNode::Normal: return tr("Normal");
-        case NinjamTrackNode::Drastic: return tr("Drastic");
-        }
+    switch (lowCutState) {
+    case LowCutState::Off:
+        return tr("Off");
+    case LowCutState::Normal:
+        return tr("Normal");
+    case LowCutState::Drastic:
+        return tr("Drastic");
+    default:
+        return tr("Off"); // just to be shure
     }
-
-    return tr("Off"); // just to be shure
 }
 
 void NinjamTrackView::updateStyleSheet()
@@ -233,12 +237,8 @@ void NinjamTrackView::setInitialValues(const persistence::CacheEntry &initialVal
     }
 
     if (settings.isRememberingLowCut()) {
-        quint8 lowCutState = initialValues.getLowCutState();
-        if (lowCutState < 3) { // Check for invalid lowCut state value, Low cut is 3 states: OFF, NOrmal and Drastic
-            for (int var = 0; var < lowCutState; ++var) {
-                buttonLowCut->click(); // force button state change
-            }
-        }
+        lowCutState = initialValues.getLowCutState();
+        buttonLowCut->setState(static_cast<quint8>(lowCutState));
     }
 
     auto instrumentIconIndex = initialValues.hasValidInstrumentIndex() ? initialValues.getInstrumentIndex() : guessInstrumentIcon();
@@ -250,7 +250,7 @@ void NinjamTrackView::setChannelMode(NinjamTrackNode::ChannelMode mode)
 {
     auto trackNode = getTrackNode();
     if (trackNode) {
-        trackNode->schefuleSetChannelMode(mode);
+        trackNode->scheduleSetChannelMode(mode);
         update();
     }
 }
@@ -290,11 +290,10 @@ void NinjamTrackView::updateGuiElements()
         networkUsageLabel->setText(QString::number(downloadTransferRate).leftJustified(3, QChar(' ')));
 
         QString toolTipText = QString("%1 %2 Kbps").arg(tr("Downloading")).arg(downloadTransferRate);
-        auto trackNode = getTrackNode();
         if (trackNode) {
             toolTipText += QString(" (%1, %2 KHz)")
                     .arg(trackNode->isStereo() ? tr("Stereo") : tr("Mono"),
-                         QString::number(trackNode->getSampleRate()/1000.0, 'f', 1));
+                         QString::number(trackNode->getDecoderSampleRate()/1000.0, 'f', 1));
         }
 
         networkUsageLabel->setToolTip(toolTipText);
@@ -323,8 +322,8 @@ void NinjamTrackView::setActivatedStatus(bool deactivated)
     // stop rendering downloaded audio
     auto trackNode = getTrackNode();
     if (trackNode) {
-        trackNode->setReceiveState(!deactivated);
-        trackNode->resetLastPeak(); // reset the internal node last peak to avoid getting the last peak calculated when the remote user was transmiting.
+        emit trackNode->postReceiveState(!deactivated);
+        emit trackNode->postResetLastPeak(); // reset the internal node last peak to avoid getting the last peak calculated when the remote user was transmiting.
     }
 }
 
@@ -515,19 +514,26 @@ void NinjamTrackView::updateBoostValue(int index)
     updateUserCacheEntry();
 }
 
+void NinjamTrackView::xmitStateChanged(bool transmiting)
+{
+    setActivatedStatus(!transmiting);
+}
+
+void NinjamTrackView::lowCutStateChanged(LowCutState newState)
+{
+    lowCutState = newState;
+    cacheEntry.setLowCutState(newState);
+    updateUserCacheEntry();
+    updateLowCutButtonToolTip();
+    buttonLowCut->style()->unpolish(this);
+    buttonLowCut->style()->polish(this);
+}
+
 void NinjamTrackView::setLowCutToNextState()
 {
     auto node = getTrackNode();
     if (node) {
-        NinjamTrackNode::LowCutState newState = node->setLowCutToNextState();
-
-        cacheEntry.setLowCutState(newState);
-        updateUserCacheEntry();
-
-        updateLowCutButtonToolTip();
-
-        buttonLowCut->style()->unpolish(this);
-        buttonLowCut->style()->polish(this);
+        emit node->postNextLowCutState();
     }
 }
 

@@ -7,7 +7,6 @@
 #include <cassert>
 #include <QDebug>
 #include "midi/MidiDriver.h"
-#include <QMutexLocker>
 
 #include "audio/Resampler.h"
 
@@ -21,7 +20,11 @@ const double AudioNode::PI_OVER_2 = 3.141592653589793238463 * 0.5;
 
 QAtomicInt AudioNode::LAST_FREE_ID = 1;
 
-void AudioNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, std::vector<midi::MidiMessage> &midiBuffer)
+int AudioNode::generateNodeId() {
+    return AudioNode::LAST_FREE_ID++;
+}
+
+void AudioNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out, std::vector<midi::MidiMessage> &midiBuffer)
 {
     Q_UNUSED(in);
 
@@ -31,17 +34,8 @@ void AudioNode::processReplacing(const SamplesBuffer &in, SamplesBuffer &out, in
     internalInputBuffer.setFrameLenght(out.getFrameLenght());
     internalOutputBuffer.setFrameLenght(out.getFrameLenght());
 
-    {
-        QMutexLocker locker(&mutex);
-        for (auto node : qAsConst(connections)) { // ask connected nodes to generate audio
-            node->processReplacing(internalInputBuffer, internalOutputBuffer, sampleRate, midiBuffer);
-        }
-    }
-
-    internalOutputBuffer.set(internalInputBuffer); // if we have no plugins inserted the input samples are just copied  to output buffer.
-
     // process inserted plugins
-    pluginsProcess(internalOutputBuffer, midiBuffer);
+    pluginsProcess(internalInputBuffer, internalOutputBuffer, midiBuffer);
 
     preFaderProcess(internalOutputBuffer); //call overrided preFaderProcess in subclasses to allow some preFader process.
 
@@ -61,14 +55,14 @@ void AudioNode::setRmsWindowSize(int samples)
     internalOutputBuffer.setRmsWindowSize(samples);
 }
 
-AudioNode::AudioNode() :
+AudioNode::AudioNode(int sampleRate) :
     internalInputBuffer(2),
     internalOutputBuffer(2),
-    lastPeak(),
     pan(0),
     leftGain(1.0),
     rightGain(1.0),
-    id(LAST_FREE_ID++),
+    id(generateNodeId()),
+    sampleRate(sampleRate),
     muted(false),
     soloed(false),
     activated(true),
@@ -76,11 +70,18 @@ AudioNode::AudioNode() :
     boost(1),
     resamplingCorrection(0)
 {
-    QObject::connect(this, &AudioNode::postGain, this, &AudioNode::setGain);
-    QObject::connect(this, &AudioNode::postPan, this, &AudioNode::setPan);
-    QObject::connect(this, &AudioNode::postBoost, this, &AudioNode::setBoost);
-    QObject::connect(this, &AudioNode::postMute, this, &AudioNode::setMute);
-    QObject::connect(this, &AudioNode::postSolo, this, &AudioNode::setSolo);
+    Q_ASSERT(sampleRate > 0);
+
+    setRmsWindowSize(audio::SamplesBuffer::computeRmsWindowSize(sampleRate));
+
+    connect(this, &AudioNode::postSetActivated, this, &AudioNode::setActivated);
+    connect(this, &AudioNode::postReset, this, &AudioNode::reset);
+    connect(this, &AudioNode::postGain, this, &AudioNode::setGain);
+    connect(this, &AudioNode::postPan, this, &AudioNode::setPan);
+    connect(this, &AudioNode::postBoost, this, &AudioNode::setBoost);
+    connect(this, &AudioNode::postMute, this, &AudioNode::setMute);
+    connect(this, &AudioNode::postSolo, this, &AudioNode::setSolo);
+    connect(this, &AudioNode::postResetLastPeak, this, &AudioNode::resetLastPeak);
 }
 
 AudioNode::~AudioNode()
@@ -150,7 +151,24 @@ void AudioNode::setMute(bool muteStatus, void* sender)
     if (this->muted != muteStatus) {
         this->muted = muteStatus;
         emit muteChanged(muteStatus, sender);
+        if (muteStatus) {
+            resetLastPeak();
+        }
     }
+}
+
+bool AudioNode::setSampleRate(int sampleRate)
+{
+    if (sampleRate <= 0) {
+        qCritical() << "Wrong track sample rate: " << sampleRate;
+        return false;
+    }
+    if (this->sampleRate != sampleRate) {
+        this->sampleRate = sampleRate;
+        setRmsWindowSize(audio::SamplesBuffer::computeRmsWindowSize(sampleRate));
+        return true;
+    }
+    return false;
 }
 
 void AudioNode::setSolo(bool soloed, void* sender)
@@ -159,6 +177,11 @@ void AudioNode::setSolo(bool soloed, void* sender)
         this->soloed = soloed;
         emit soloChanged(soloed, sender);
     }
+}
+
+void AudioNode::setActivated(bool activated)
+{
+    this->activated = activated;
 }
 
 void AudioNode::reset()
@@ -175,24 +198,4 @@ void AudioNode::updateGains()
     double angle = pan * PI_OVER_2 * 0.5;
     leftGain = (float)(ROOT_2_OVER_2 * (cos(angle) - sin(angle)));
     rightGain = (float)(ROOT_2_OVER_2 * (cos(angle) + sin(angle)));
-}
-
-bool AudioNode::connect(AudioNode &other)
-{
-    if (&other != this) {
-        QMutexLocker(&(other.mutex));
-        other.connections.insert(this);
-        return true;
-    }
-    return false;
-}
-
-bool AudioNode::disconnect(AudioNode &other)
-{
-    if (&other != this) {
-        QMutexLocker(&(other.mutex));
-        other.connections.remove(this);
-        return true;
-    }
-    return false;
 }

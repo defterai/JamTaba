@@ -48,6 +48,11 @@ public:
 
     virtual void setActivatedStatus(bool deactivated);
 
+    QSharedPointer<audio::AudioNode> getTrack() const;
+
+    template<class T>
+    QSharedPointer<T> getTrack() const;
+
     int getTrackID() const;
 
     bool isActivated() const;
@@ -106,7 +111,7 @@ protected:
     QColor tintColor;
 
 private:
-    audio::AudioPeak maxPeak;
+    audio::AudioPeak audioPeak;
 
 protected slots:
     virtual void toggleMuteStatus(bool enabled);
@@ -128,6 +133,12 @@ private slots:
 inline QColor BaseTrackView::getTintColor() const
 {
     return tintColor;
+}
+
+template<class T>
+inline QSharedPointer<T> BaseTrackView::getTrack() const
+{
+    return getTrack().dynamicCast<T>();
 }
 
 #endif // TRACKVIEW_H

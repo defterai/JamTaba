@@ -9,6 +9,7 @@
 #include <cstring>
 #include <vector>
 #include <QThread>
+#include <QRandomGenerator>
 
 using audio::Looper;
 using audio::AudioPeak;
@@ -184,7 +185,7 @@ void Looper::incrementLockedLayer()
     if (getLockedLayers() > 0) {
         do {
             if (isRandomizing)
-                nextLayer = qrand() % maxLayers;
+                nextLayer = QRandomGenerator::global()->generate() % maxLayers;
             else
                 nextLayer = (nextLayer + 1) % maxLayers;
         }
@@ -206,7 +207,7 @@ void Looper::incrementCurrentLayer()
 
     quint8 nextLayer = currentLayerIndex;
     if (isRandomizing && maxLayers > 1)
-        nextLayer = qrand() % maxLayers;
+        nextLayer = QRandomGenerator::global()->generate() % maxLayers;
     else
         nextLayer = (nextLayer + 1) % maxLayers;
 
@@ -290,7 +291,7 @@ void Looper::startRecording()
         if (!isOverdubbing) // avoid discard layer content if is overdubbing
             layers[currentLayerIndex]->zero();
 
-        setState(new RecordingState(this, firstRecordingLayer));
+        setState(new RecordingState(firstRecordingLayer));
     }
 }
 
@@ -303,7 +304,7 @@ void Looper::toggleRecording()
         quint8 startFrom = (focusedLayerIndex >= 0) ? focusedLayerIndex : currentLayerIndex;
         int firstRecordingLayer = getFirstUnlockedLayerIndex(startFrom);
         if (firstRecordingLayer >= 0) {
-            setState(new WaitingToRecordState(this));
+            setState(new WaitingToRecordState());
             setCurrentLayer(firstRecordingLayer);
         }
         else {
@@ -333,7 +334,7 @@ void Looper::stop()
 
 void Looper::play()
 {
-    setState(new PlayingState(this));
+    setState(new PlayingState());
 
     if (mode == LooperMode::Sequence && focusedLayerIndex >= 0) {
         currentLayerIndex = focusedLayerIndex;
@@ -479,7 +480,7 @@ void Looper::addBuffer(const SamplesBuffer &samples)
         return;
 
     uint samplesToProcess = qMin(samples.getFrameLenght(), intervalLenght - intervalPosition);
-    state->addBuffer(samples, samplesToProcess);
+    state->addBuffer(this, samples, samplesToProcess);
 }
 
 void Looper::mixToBuffer(SamplesBuffer &samples)
@@ -489,7 +490,7 @@ void Looper::mixToBuffer(SamplesBuffer &samples)
 
     uint samplesToProcess = qMin(samples.getFrameLenght(), intervalLenght - intervalPosition);
     AudioPeak peakBeforeMix = samples.computePeak();
-    state->mixTo(samples, samplesToProcess);
+    state->mixTo(this, samples, samplesToProcess);
 
     AudioPeak peakAfterMix = samples.computePeak();
 
@@ -560,7 +561,7 @@ void Looper::startNewCycle(uint samplesInCycle)
         }
     }
 
-    state->handleNewCycle(samplesInCycle);
+    state->handleNewCycle(this, samplesInCycle);
 }
 
 void Looper::setState(LooperState *newState)

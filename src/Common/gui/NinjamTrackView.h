@@ -77,6 +77,7 @@ private:
     // used to send channel receive on/off messages
     QString userFullName;
     quint8 channelIndex;
+    LowCutState lowCutState;
 
     Qt::Orientation orientation;
 
@@ -120,6 +121,8 @@ protected slots:
     void setLowCutToNextState();
 
 private slots:
+    void xmitStateChanged(bool transmiting);
+    void lowCutStateChanged(LowCutState newState);
     void setReceiveState(bool receive);
     void instrumentIconChanged(quint8 instrumentIndex);
 

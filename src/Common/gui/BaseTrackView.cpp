@@ -217,17 +217,14 @@ void BaseTrackView::updateBoostValue(int boostValue)
 
 void BaseTrackView::updateAudioPeak(const audio::AudioPeak& audioPeak)
 {
-    if (audioPeak.getMaxPeak() > maxPeak.getMaxPeak()) {
-        maxPeak.update(audioPeak);
-    }
-    // update the track peaks
-    setPeaks(audioPeak.getLeftPeak(), audioPeak.getRightPeak(),
-             audioPeak.getLeftRMS(), audioPeak.getRightRMS());
+    this->audioPeak = audioPeak;
 }
 
 void BaseTrackView::updateGuiElements()
 {
-
+    // update the track peaks
+    setPeaks(audioPeak.getLeftPeak(), audioPeak.getRightPeak(),
+             audioPeak.getLeftRMS(), audioPeak.getRightRMS());
 }
 
 QSize BaseTrackView::sizeHint() const
@@ -289,6 +286,11 @@ void BaseTrackView::setActivatedStatus(bool deactivated)
     setProperty("unlighted", QVariant(deactivated));
     this->activated = !deactivated;
     updateStyleSheet();
+}
+
+QSharedPointer<audio::AudioNode> BaseTrackView::getTrack() const
+{
+    return this->trackNode.lock();
 }
 
 int BaseTrackView::getTrackID() const

@@ -46,7 +46,7 @@ public:
 
     QSize sizeHint() const override;
 
-    void addVideoInterval(const QByteArray &encodedVideoData);
+    void addVideoInterval(const QSharedPointer<QByteArray>& encodedVideoData);
 
     QColor getTintColor() const;
 

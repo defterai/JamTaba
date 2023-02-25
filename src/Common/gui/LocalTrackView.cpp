@@ -257,7 +257,7 @@ void LocalTrackView::reset()
 {
     auto inputNode = getInputNode();
     if (inputNode) {
-        inputNode->reset();
+        emit inputNode->postReset();
     }
 }
 
@@ -280,10 +280,10 @@ QPushButton *LocalTrackView::createLooperButton()
     button->setObjectName(QStringLiteral("buttonLooper"));
     button->setEnabled(false); // disabled by default
 
-    connect(button, &QPushButton::clicked, [=]{
+    connect(button, &QPushButton::clicked, this, [&](){
         auto inputNode = getInputNode();
         if (inputNode) {
-            emit openLooperEditor(inputNode->getID());
+            emit openLooperEditor(inputNode);
         }
     });
 
@@ -317,7 +317,7 @@ void LocalTrackView::setStereoInversion(bool stereoInverted)
 {
     auto inputNode = getInputNode();
     if (inputNode) {
-        inputNode->postSetStereoInversion(stereoInverted, this);
+        emit inputNode->postSetStereoInversion(stereoInverted, this);
         buttonStereoInversion->setChecked(stereoInverted);
     }
 }

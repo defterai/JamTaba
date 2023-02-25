@@ -75,60 +75,56 @@ class LocalInputNode : public AudioNode
     Q_OBJECT
 
 public:
-    LocalInputNode(const QSharedPointer<LocalInputGroup>& inputGroup, const QSharedPointer<Looper>& looper);
+    LocalInputNode(int inputGroupIndex, const QSharedPointer<Looper>& looper, int sampleRate);
     ~LocalInputNode();
-    void processReplacing(const SamplesBuffer &in, SamplesBuffer &out, int sampleRate, std::vector<midi::MidiMessage> &midiBuffer) override;
-    virtual int getSampleRate() const;
+    void attachChannelGroup(const QSharedPointer<audio::LocalInputGroup>& group);
+    void processReplacing(const SamplesBuffer &in, SamplesBuffer &out, std::vector<midi::MidiMessage> &midiBuffer) override;
+    bool setSampleRate(int newSampleRate) override;
 
     LocalInputMode getInputMode() const;
 
-    const QSharedPointer<LocalInputGroup>& getChannelGroup() const;
     int getChannelGroupIndex() const;
 
     const audio::SamplesBuffer &getLastBuffer() const;
     SamplesBuffer getLastBufferMixedToMono() const;
-
-    void setProcessorsSampleRate(int newSampleRate);
-
-    void closeProcessorsWindows();
-
-    bool hasMidiActivity() const;
-
-    quint8 getMidiActivityValue() const;
-
-    void resetMidiActivity();
 
     const LocalAudioInputProps& getAudioInputProps() const;
     const MidiInputProps& getMidiInputProps() const;
 
     qint8 getTranspose() const;
 
-    void reset() override;
-
-    /** local input tracks are always activated, so is possible play offline while listening to a room.
-     The other tracks (ninjam tracks) are deactivated when the 'room preview' is started. Deactivated tracks are not rendered. */
-    bool isActivated() const override;
-
     bool isReceivingRoutedMidiInput() const;
     void setReceivingRoutedMidiInput(bool receiveRoutedMidiInput);
     bool isRoutingMidiInput() const;
     void setRoutingMidiInput(bool routeMidiInput);
 
-    void startNewLoopCycle(uint intervalLenght);
-    void stopLooper();
-
     const QSharedPointer<Looper>& getLooper() const;
 
-    virtual void addProcessor(const QSharedPointer<AudioNodeProcessor> &newProcessor, quint32 slotIndex);
+    template<class T>
+    QList<QSharedPointer<T>> getProcessors()
+    {
+        QList<QSharedPointer<T>> processors;
+        for (const auto& processor : getProcessors()) {
+            auto p = processor.dynamicCast<T>();
+            if (p) {
+                processors.append(p);
+            }
+        }
+        return processors;
+    }
+
+    void addProcessor(const QSharedPointer<AudioNodeProcessor> &newProcessor, quint32 slotIndex);
     void swapProcessors(quint32 firstSlotIndex, quint32 secondSlotIndex);
     void removeProcessor(const QSharedPointer<AudioNodeProcessor> &processor);
     void suspendProcessors();
     void resumeProcessors();
-    virtual void updateProcessorsGui();
+    void updateProcessorsGui();
+    void closeProcessorsWindows();
 
     static const quint8 MAX_PROCESSORS_PER_TRACK = 4;
 signals:
     void midiNoteLearned(quint8 midiNote);
+    void midiActivityDetected(quint8 midiActivityValue);
     void stereoInversionChanged(bool stereoInverted, void* sender);
     void inputModeChanged(audio::LocalInputMode inputMode, void* sender);
     void audioInputPropsChanged(audio::LocalAudioInputProps audioInput, void* sender);
@@ -140,18 +136,23 @@ signals:
     void postSetMidiInputProps(audio::MidiInputProps midiInputProps, void* sender);
 
 protected:
-    void pluginsProcess(audio::SamplesBuffer &out, std::vector<midi::MidiMessage> &midiBuffer) override;
+    void reset() override;
+    void pluginsProcess(audio::SamplesBuffer &in, audio::SamplesBuffer &out, std::vector<midi::MidiMessage> &midiBuffer) override;
     void preFaderProcess(audio::SamplesBuffer &out) override;
     void postFaderProcess(audio::SamplesBuffer &out) override;
 
 private:
     using ProcessorsArray = std::array<QSharedPointer<AudioNodeProcessor>, MAX_PROCESSORS_PER_TRACK>;
 
+    mutable QMutex mutex; // used to protected processors manipulation because nodes can be added or removed by different threads
     ProcessorsArray processors;
     LocalAudioInputProps audioInputProps;
     MidiInputProps midiInputProps;
-    quint8 lastMidiActivity; // last max velocity or control value
-    QSharedPointer<LocalInputGroup> inputGroup;
+
+    QSharedPointer<Looper> looper;
+
+    QSharedPointer<audio::LocalInputGroup> inputGroup;
+    int inputGroupIndex;
 
     bool receivingRoutedMidiInput; // true when this is the first subchannel and is receiving midi input from second subchannel (rounted midi input)? issue #102
     bool routingMidiInput; // true when this is the second channel and is sending midi messages to the first channel
@@ -171,7 +172,7 @@ private:
     void setAudioInputProps(LocalAudioInputProps props, void* sender);
     void setMidiInputProps(MidiInputProps props, void* sender);
 
-    QSharedPointer<Looper> looper;
+    void setProcessorsSampleRate(int newSampleRate);
 };
 
 inline const QSharedPointer<Looper>& LocalInputNode::getLooper() const
@@ -189,43 +190,14 @@ inline bool LocalInputNode::isReceivingRoutedMidiInput() const
     return receivingRoutedMidiInput;
 }
 
-inline int LocalInputNode::getSampleRate() const
-{
-    return 0;
-}
-
-inline const QSharedPointer<LocalInputGroup>& LocalInputNode::getChannelGroup() const
-{
-    return inputGroup;
-}
-
 inline const audio::SamplesBuffer &LocalInputNode::getLastBuffer() const
 {
     return internalOutputBuffer;
 }
 
-inline bool LocalInputNode::hasMidiActivity() const
-{
-    return lastMidiActivity > 0;
-}
-
-inline quint8 LocalInputNode::getMidiActivityValue() const
-{
-    return lastMidiActivity;
-}
-
-inline void LocalInputNode::resetMidiActivity()
-{
-    lastMidiActivity = 0;
-}
-
-inline bool LocalInputNode::isActivated() const
-{
-    return true;
-}
-
 } // namespace
 
+Q_DECLARE_METATYPE(audio::LocalInputMode)
 Q_DECLARE_METATYPE(audio::LocalAudioInputProps)
 Q_DECLARE_METATYPE(audio::MidiInputProps)
 

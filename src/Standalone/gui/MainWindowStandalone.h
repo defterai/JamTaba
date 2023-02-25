@@ -23,8 +23,6 @@ class MainWindowStandalone : public MainWindow
 public:
     explicit MainWindowStandalone(MainControllerStandalone *controller);
 
-    persistence::LocalInputTrackSettings getInputsSettings() const override;
-
     void addChannelsGroup(int instrumentIndex) override;
 
     void refreshTrackInputSelection(int inputTrackIndex);

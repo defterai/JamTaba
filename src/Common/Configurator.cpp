@@ -101,7 +101,7 @@ void Configurator::logHandler(QtMsgType type, const QMessageLogContext &context,
            << localMsg.constData()
            << COLOR_RESET << " [" << file << ", line " << context.line << "]" << Qt::endl;
 
-    QTextStream(stdout) << stringMsg;
+    QTextStream(stdout) << stringMsg << Qt::endl;
 
     Configurator *configurator = Configurator::getInstance();
     QDir logDir = configurator->getBaseDir();
