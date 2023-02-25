@@ -36,6 +36,9 @@ private slots:
 
 };
 
+Q_DECLARE_METATYPE(QFutureInterface<void>)
+Q_DECLARE_METATYPE(TaskCallback)
+
 inline TaskObject::TaskObject() {
     static bool registered = false;
     if (!registered) {
@@ -62,8 +65,5 @@ inline void TaskObject::processTask(QFutureInterface<void> futureInterface, Task
     }
     futureInterface.reportFinished();
 }
-
-Q_DECLARE_METATYPE(QFutureInterface<void>)
-Q_DECLARE_METATYPE(TaskCallback)
 
 #endif // HELPERS_H
