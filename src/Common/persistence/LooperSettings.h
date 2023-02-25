@@ -18,7 +18,7 @@ class LooperSettings final : public SettingsObject
 public:
     static const quint8 DEFAULT_LAYERS_COUNT = 4;
     static const quint8 MIN_LAYERS_COUNT = 1;
-    static const quint8 MAX_LAYERS_COUNT = 8;
+    static const quint8 MAX_LAYERS_COUNT;
     static const std::array<LooperMode, 3> LOOPER_MODES;
 
     LooperSettings();

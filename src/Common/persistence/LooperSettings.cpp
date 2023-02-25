@@ -5,6 +5,8 @@
 
 using namespace persistence;
 
+const quint8 LooperSettings::MAX_LAYERS_COUNT = 8;
+
 static_assert(LooperSettings::DEFAULT_LAYERS_COUNT >= LooperSettings::MIN_LAYERS_COUNT &&
     LooperSettings::DEFAULT_LAYERS_COUNT <= LooperSettings::MAX_LAYERS_COUNT, "Wrong LooperSettings::DEFAULT_LAYERS_COUNT constant value");
 static_assert(LooperSettings::MIN_LAYERS_COUNT > 0, "Wrong LooperSettings::MIN_LAYERS_COUNT constant value");
